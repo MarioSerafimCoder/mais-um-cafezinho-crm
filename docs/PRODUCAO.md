@@ -63,9 +63,17 @@ Em produção, testar sem sessão: `/`, `/campaigns`, `/editor/new`, `/subscribe
 
 Não há banco próprio. Os rascunhos locais continuam na chave `mais-um-cafezinho:drafts:v1` do navegador e da origem original. Não limpar dados do navegador. A mudança de `http://127.0.0.1:5173` para o domínio de produção não migra esses dados automaticamente. Os rascunhos remotos permanecem na Buttondown e dependem da mesma conta/chave para serem consultados. Não houve envio, exclusão ou migração de rascunhos nesta publicação.
 
-## Pendências conhecidas na preparação
+## Estado verificado em 27/10/2026
 
-- Ativar Zero Trust Free e confirmar o e-mail autorizado.
-- Criar aplicação/política Access e configurar os dois bindings de runtime.
-- Fornecer `BUTTONDOWN_API_KEY` como Secret no Pages.
-- Repetir os testes reais autenticados e de integração após essas etapas. Um deploy concluído não comprova autenticação ou conexão Buttondown.
+- Projeto Pages criado e conectado ao GitHub. O commit `f60a1be` foi publicado automaticamente com sucesso, deploy `faf51a19-88ee-442c-8605-5789b0f176dd`. O check de validação do GitHub também passou.
+- Domínio `crm.marioserafim.com.br`: **Active**, **SSL enabled** no painel Cloudflare. HTTP retorna 301 para HTTPS.
+- Zero Trust Free ativado pelo proprietário. Aplicação `Mais um Cafezinho CRM`, ID `405189ac-5fd0-4f97-a3b6-efa3bd2d7366`, cobre todo o hostname. Política `Somente Mário Serafim`, ID `4fb044ff-a4d2-4485-a8f6-0c8053fc8499`, permite apenas `marioserafim.da@gmail.com`.
+- Team domain `wispy-hall-9782.cloudflareaccess.com` e AUD configurados em `wrangler.toml`. São parâmetros públicos de validação, não credenciais. Cookie Access com HttpOnly e sessão de 24 horas; login real com a conta autorizada concluído.
+- Produção configurada como **Fail closed**: ao esgotar a quota de Functions, não há fallback para servir o painel estático sem middleware. Builds automáticos de preview desativados; produção em `main` continua automática.
+- Sem sessão, `/`, `/campaigns`, `/editor/new`, `/subscribers`, `/templates`, `/settings`, `/api/status` e `/api/subscribers` retornaram 302 para o login Access. O hostname principal `pages.dev` recusou painel e API com 404.
+- Com sessão, o painel e as telas de campanhas, assinantes, templates e configurações carregaram no domínio oficial. `/api/status` autenticado confirmou execução das Functions, inicialmente com `configured:false` (sem chave Buttondown).
+- Dashboard verificado em desktop e largura mobile de 375 px, sem transbordamento horizontal. Editor e prévias desktop/celular verificados no Pages local com os headers de segurança. Uma falha existente de desmontagem do editor na prévia foi corrigida: conteúdo e referência do editor permanecem ativos, inclusive para salvar durante a prévia. Teste de regressão cobre a preservação e o salvamento do texto.
+- Validação local e GitHub: **15 testes**, lint, TypeScript do frontend e backend, build Vite e compilação das Pages Functions passaram. O build mantém o aviso preexistente de chunk grande do editor.
+- Não foram alterados LASTRO, portfólio, blog, newsletter pública ou seus registros DNS. Não houve chamadas de envio ou escrita em rascunhos remotos.
+
+O proprietário cadastrou `BUTTONDOWN_API_KEY` diretamente como Secret no Pages. Após configurar ou rotacionar esse Secret, é necessário novo deploy e validação por consulta autenticada real; a confirmação de consulta à Buttondown não pode ser inferida apenas de `/api/status`. A política de e-mail foi conferida, mas não houve login real com uma segunda conta fora da allowlist.
