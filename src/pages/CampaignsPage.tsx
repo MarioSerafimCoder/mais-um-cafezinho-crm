@@ -63,7 +63,7 @@ export function CampaignsPage() {
         setDemo(false)
       } else if (status.demo) {
         if (!active) return
-        setCampaigns([...localCampaigns(), ...demoCampaigns])
+        setCampaigns([...locals, ...demoCampaigns])
         setRemoteCount(0)
         setHasNext(false)
         setDemo(true)

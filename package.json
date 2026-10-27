@@ -15,7 +15,7 @@
     "preview": "vite preview",
     "pages:dev": "wrangler pages dev dist",
     "pages:local": "wrangler pages dev dist --ip 127.0.0.1 --port 8788 --persist-to .wrangler/editor-local --d1 DB=00000000-0000-0000-0000-000000000001 --binding ENVIRONMENT=development --binding LOCAL_ACCESS_BYPASS=true --binding DEMO_MODE=true",
-    "pages:test": "wrangler pages dev dist --ip 127.0.0.1 --port 8788 --persist-to .wrangler/editor-test --d1 DB=00000000-0000-0000-0000-000000000001 --binding ENVIRONMENT=development --binding LOCAL_ACCESS_BYPASS=true --binding DEMO_MODE=true",
+    "pages:test": "wrangler pages dev dist --ip 127.0.0.1 --port 8790 --persist-to .wrangler/editor-test --d1 DB=00000000-0000-0000-0000-000000000001 --binding ENVIRONMENT=development --binding LOCAL_ACCESS_BYPASS=true --binding DEMO_MODE=true",
     "db:local": "wrangler d1 migrations apply DB --local --config wrangler.local.toml --persist-to .wrangler/editor-local",
     "db:test": "wrangler d1 migrations apply DB --local --config wrangler.local.toml --persist-to .wrangler/editor-test",
     "test": "vitest run",

@@ -106,9 +106,10 @@ test('falha de rede não vira demonstração, e o rascunho local abre offline', 
 })
 
 test('documento estruturado recuperado em um segundo dispositivo pelo D1 local', async ({ page, browser }) => {
+  const title = `Cópia recuperável ${crypto.randomUUID()}`
   const body = await openEditor(page)
   await body.fill('Documento entre dispositivos')
-  await page.getByLabel('Assunto da newsletter').fill('Minha cópia recuperável')
+  await page.getByLabel('Assunto da newsletter').fill(title)
   await page.getByRole('button', { name: 'Salvar cópia na nuvem' }).click()
   await expect(page.getByText('Cópia do documento salva na nuvem.')).toBeVisible()
   const url = page.url()
@@ -116,7 +117,9 @@ test('documento estruturado recuperado em um segundo dispositivo pelo D1 local',
   const other = await second.newPage()
   await other.goto(url)
   await expect(other.locator('.tiptap')).toContainText('Documento entre dispositivos')
-  await expect(other.getByLabel('Assunto da newsletter')).toHaveValue('Minha cópia recuperável')
+  await expect(other.getByLabel('Assunto da newsletter')).toHaveValue(title)
+  await other.goto(new URL('/campaigns', url).toString())
+  await expect(other.getByText(title, { exact: true })).toBeVisible()
   await second.close()
 })
 
