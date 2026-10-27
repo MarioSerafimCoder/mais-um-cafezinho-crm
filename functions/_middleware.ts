@@ -30,8 +30,18 @@ function withSecurityHeaders(response: Response, isApi: boolean) {
 
 export const onRequest = async ({ request, env, next }: Context) => {
   const url = new URL(request.url)
-  const isLocal = ['localhost', '127.0.0.1', '::1'].includes(url.hostname)
+  const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
   const localBypass = isLocal && env.LOCAL_ACCESS_BYPASS === 'true'
+  const isApi = url.pathname.startsWith('/api/')
+
+  // Pages aliases and previews must never provide another entry point to the CRM.
+  if (!isLocal && url.hostname !== 'crm.marioserafim.com.br') {
+    return withSecurityHeaders(Response.json({ error: 'Endereço não autorizado.' }, { status: 404 }), isApi)
+  }
+  if (!isLocal && url.protocol !== 'https:') {
+    url.protocol = 'https:'
+    return withSecurityHeaders(Response.redirect(url.toString(), 308), isApi)
+  }
   const teamDomain = env.CF_ACCESS_TEAM_DOMAIN?.trim().replace(/^https?:\/\//, '').replace(/\/$/, '')
   const audience = env.CF_ACCESS_AUD?.trim()
 
@@ -44,7 +54,7 @@ export const onRequest = async ({ request, env, next }: Context) => {
       return withSecurityHeaders(Response.json({ error: 'Acesso restrito.' }, { status: 401 }), url.pathname.startsWith('/api/'))
     }
     try {
-      await jwtVerify(assertion, accessJwks(teamDomain), { issuer: `https://${teamDomain}`, audience })
+      await jwtVerify(assertion, accessJwks(teamDomain), { issuer: `https://${teamDomain}`, audience, algorithms: ['RS256'] })
     } catch {
       return withSecurityHeaders(Response.json({ error: 'Acesso restrito.' }, { status: 401 }), url.pathname.startsWith('/api/'))
     }

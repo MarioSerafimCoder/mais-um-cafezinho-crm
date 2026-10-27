@@ -41,7 +41,7 @@ pnpm pages:dev
 
 ## Configuração de produção
 
-Este repositório ainda não foi implantado. Para uma futura implantação manual no Cloudflare Pages:
+Destino de produção: `https://crm.marioserafim.com.br`. O projeto usa Cloudflare Pages com integração GitHub na branch `main`. Consulte [o guia de operação](docs/PRODUCAO.md) para ativação, validação e pendências.
 
 1. Use `pnpm build` como comando de build e `dist` como diretório de saída.
 2. Configure `BUTTONDOWN_API_KEY` como secret da Pages Function.
@@ -49,7 +49,7 @@ Este repositório ainda não foi implantado. Para uma futura implantação manua
 4. Proteja todas as rotas da aplicação com uma aplicação self-hosted do Cloudflare Access. Sem um JWT Access válido, as Functions recusam as chamadas.
 5. Configure a chave da Buttondown com apenas `subscriber_access: read`, `email_access: write` e `sending_access: none`.
 
-O nome de domínio `newsletter.marioserafim.com.br`, DNS e implantação não foram alterados nesta etapa.
+O middleware bloqueia os aliases `pages.dev` e previews. Sem configuração válida do Access, o painel e as APIs permanecem bloqueados. O bypass local só funciona em endereços de loopback.
 
 ## Segurança e limitações conhecidas
 
@@ -57,7 +57,8 @@ O nome de domínio `newsletter.marioserafim.com.br`, DNS e implantação não fo
 - `.env.example` e `.dev.vars.example` são modelos sem credenciais.
 - A configuração da integração indica que a chave existe; a conexão é confirmada pela resposta da API ao carregar dados.
 - O editor visual é carregado sob demanda e aumenta o tamanho desse chunk (React Email Editor e Prism). As telas de painel não carregam esse editor até abrir a rota.
-- Envio/publicação, deploy em produção, DNS e monitoramento de entregabilidade ficam fora deste MVP.
+- Envio/publicação de newsletters e monitoramento de entregabilidade ficam fora deste MVP.
+- Rascunhos locais pertencem ao navegador e à origem em que foram criados. Publicar em outro domínio não transfere o `localStorage`; os originais continuam no endereço local. Rascunhos sincronizados continuam na Buttondown.
 
 ## Estrutura
 
