@@ -1,4 +1,4 @@
-import { buttondown, errorResponse, json } from '../_utils'
+import { buttondown, errorResponse, json, pageResult } from '../_utils'
 import type { AppEnv } from '../_utils'
 
 type Context = { request: Request; env: AppEnv }
@@ -24,7 +24,7 @@ export const onRequestGet = async ({ request, env }: Context) => {
       buttondown({ request, env }, '/emails?status=draft&ordering=-creation_date&page=1'),
       buttondown({ request, env }, '/emails?status=scheduled&ordering=publish_date&page=1'),
       buttondown({ request, env }, '/emails?ordering=-creation_date&page=1'),
-    ]) as ListResult[]
+    ]).then((pages) => pages.map(pageResult)) as ListResult[]
     const recent = Array.isArray(queries[5].results) ? queries[5].results.slice(0, 5) : []
     return json({
       subscribers: count(queries[0]),

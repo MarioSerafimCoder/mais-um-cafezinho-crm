@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Search, ChevronLeft, ChevronRight, Download, UserRound } from 'lucide-react'
-import { api } from '../lib/api'
+import { api, requireConnection } from '../lib/api'
 import { demoSubscribers } from '../data/templates'
 import type { ApiPage, IntegrationStatus, Subscriber } from '../types'
 import { DemoNotice, ErrorState, LoadingState, PageTitle, StatusPill } from '../components/ui'
@@ -43,7 +43,7 @@ export function SubscribersPage() {
 
   useEffect(() => {
     let active = true
-    void api.status().then(async (integration) => {
+    void api.status().then(requireConnection).then(async (integration) => {
       if (!active) return
       setStatus(integration)
       if (integration.configured) {
@@ -62,7 +62,6 @@ export function SubscribersPage() {
 
   const loading = loadedKey !== requestKey
   const visibleError = loading ? '' : error
-  const pages = Math.max(1, Math.ceil((pageData?.count || 0) / pageSize))
   const activeRows = useMemo(() => pageData?.results || [], [pageData])
 
   return <>
@@ -84,7 +83,7 @@ export function SubscribersPage() {
         </tr>})}
       </tbody></table></div>
       {activeRows.length === 0 && <div className="table-empty">{query ? `Nenhum assinante encontrado para “${query}”.` : 'Nenhum assinante nesta página.'}</div>}
-      <div className="table-pagination"><span>Mostrando {activeRows.length ? (page - 1) * pageSize + 1 : 0}–{(page - 1) * pageSize + activeRows.length} de {pageData?.count?.toLocaleString('pt-BR') ?? '—'}</span><div><button className="icon-button" aria-label="Página anterior" disabled={page <= 1 || loading} onClick={() => setPage((value) => Math.max(1, value - 1))}><ChevronLeft size={17} /></button><span className="page-indicator">{page} / {pages}</span><button className="icon-button" aria-label="Próxima página" disabled={!pageData?.next || loading} onClick={() => setPage((value) => value + 1)}><ChevronRight size={17} /></button></div></div>
+      <div className="table-pagination"><span>{activeRows.length} registros nesta página · {pageData?.count?.toLocaleString('pt-BR') ?? '—'} no total</span><div><button className="icon-button" aria-label="Página anterior" disabled={page <= 1 || loading} onClick={() => setPage((value) => Math.max(1, value - 1))}><ChevronLeft size={17} /></button><span className="page-indicator">Página {page}</span><button className="icon-button" aria-label="Próxima página" disabled={!pageData?.next || loading} onClick={() => setPage((value) => value + 1)}><ChevronRight size={17} /></button></div></div>
       <p className="privacy-note"><Download size={14} /> Esta tela é somente leitura. Descadastrados nunca são reativados nem importados por aqui.</p>
     </>}
   </>

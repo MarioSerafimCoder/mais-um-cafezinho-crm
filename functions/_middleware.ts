@@ -31,8 +31,13 @@ function withSecurityHeaders(response: Response, isApi: boolean) {
 export const onRequest = async ({ request, env, next }: Context) => {
   const url = new URL(request.url)
   const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
-  const localBypass = isLocal && env.LOCAL_ACCESS_BYPASS === 'true'
+  const localBypass = isLocal && env.LOCAL_ACCESS_BYPASS === 'true' && env.ENVIRONMENT === 'development'
   const isApi = url.pathname.startsWith('/api/')
+
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
+    const origin = request.headers.get('Origin')
+    if ((origin && origin !== url.origin) || request.headers.get('Sec-Fetch-Site') === 'cross-site') return withSecurityHeaders(Response.json({ error: 'Origem não autorizada.' }, { status: 403 }), isApi)
+  }
 
   // Pages aliases and previews must never provide another entry point to the CRM.
   if (!isLocal && url.hostname !== 'crm.marioserafim.com.br') {

@@ -75,7 +75,7 @@ describe('proteção do CRM em produção', () => {
   })
 
   it('não permite ativar bypass local em produção', async () => {
-    const config = { ...env, LOCAL_ACCESS_BYPASS: 'true' }
+    const config = { ...env, LOCAL_ACCESS_BYPASS: 'true', ENVIRONMENT: 'development' }
     expect((await call('https://crm.marioserafim.com.br/', config).response).status).toBe(401)
     for (const host of ['localhost', '127.0.0.1', '[::1]']) {
       expect((await call(`http://${host}:8788/`, config).response).status).toBe(200)

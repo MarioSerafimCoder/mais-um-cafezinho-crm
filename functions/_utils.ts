@@ -1,8 +1,15 @@
+import { byteLength } from '../shared/safety'
+import type { D1Database } from '@cloudflare/workers-types'
+export { isSafeEmailBody } from '../shared/safety'
+
 export type AppEnv = {
   BUTTONDOWN_API_KEY?: string
   CF_ACCESS_TEAM_DOMAIN?: string
   CF_ACCESS_AUD?: string
   LOCAL_ACCESS_BYPASS?: string
+  DB?: D1Database
+  DEMO_MODE?: string
+  ENVIRONMENT?: string
 }
 
 type RequestContext = {
@@ -18,11 +25,27 @@ export function json(data: unknown, status = 200) {
   return Response.json(data, { status, headers: { 'Cache-Control': 'private, no-store' } })
 }
 
-export async function parseJson(request: Request, limit = 220_000) {
+export async function readLimitedBody(request: Request, limit: number) {
   const declaredLength = Number(request.headers.get('content-length') || 0)
   if (declaredLength > limit) throw new Response('Corpo da solicitação muito grande.', { status: 413 })
-  const text = await request.text()
-  if (text.length > limit) throw new Response('Corpo da solicitação muito grande.', { status: 413 })
+  const reader = request.body?.getReader()
+  const parts: Uint8Array[] = []
+  let size = 0
+  if (reader) while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.byteLength
+    if (size > limit) { await reader.cancel(); throw new Response('Corpo da solicitação muito grande.', { status: 413 }) }
+    parts.push(value)
+  }
+  const bytes = new Uint8Array(size)
+  let offset = 0
+  for (const part of parts) { bytes.set(part, offset); offset += part.byteLength }
+  return bytes
+}
+
+export async function parseJson(request: Request, limit = 220_000) {
+  const text = new TextDecoder().decode(await readLimitedBody(request, limit))
   try {
     return JSON.parse(text) as unknown
   } catch {
@@ -37,7 +60,8 @@ export async function buttondown(context: RequestContext, path: string, init: Re
   headers.set('Authorization', `Token ${key}`)
   headers.set('X-API-Version', apiVersion)
   headers.set('Accept', 'application/json')
-  const response = await fetch(`${apiBase}${path}`, { ...init, headers })
+  if (!path.startsWith('/') || path.startsWith('//') || path.includes('://')) throw new Error('INVALID_UPSTREAM_PATH')
+  const response = await fetch(`${apiBase}${path}`, { ...init, headers, redirect: 'error', signal: AbortSignal.timeout(15_000) })
   if (!response.ok) {
     const error = new Error(`BUTTONDOWN_${response.status}`)
     Object.assign(error, { status: response.status })
@@ -53,6 +77,7 @@ export function errorResponse(error: unknown) {
   if (error instanceof Error && error.message === 'BUTTONDOWN_NOT_CONFIGURED') {
     return json({ error: 'Integração com Buttondown não configurada.' }, 503)
   }
+  if (error instanceof Error && ['TimeoutError', 'AbortError', 'TypeError'].includes(error.name)) return json({ error: 'A conexão com a Buttondown falhou. Seu rascunho local foi preservado.' }, 502)
   const messages: Record<number, string> = {
     401: 'A chave da Buttondown não foi aceita. Confira a configuração.',
     403: 'A chave da Buttondown não tem permissão para esta operação.',
@@ -60,20 +85,30 @@ export function errorResponse(error: unknown) {
     409: 'A Buttondown encontrou um conflito ao salvar este rascunho.',
     422: 'A Buttondown não aceitou os dados deste rascunho. Confira o conteúdo.',
     429: 'A Buttondown está limitando as solicitações. Aguarde um pouco e tente novamente.',
+    400: 'A Buttondown recusou o formato do rascunho. Revise o conteúdo antes de tentar novamente.',
   }
   if (status) return json({ error: messages[status] || 'A Buttondown não concluiu a solicitação.' }, status >= 500 ? 502 : status)
   return json({ error: 'Não foi possível concluir a solicitação agora.' }, 500)
 }
 
+export function pageResult(value: unknown) {
+  if (!value || typeof value !== 'object' || !Array.isArray((value as { results?: unknown }).results)) throw new Error('INVALID_UPSTREAM_RESPONSE')
+  const page = value as { results: unknown[]; count?: number; next?: string | null; previous?: string | null }
+  return { ...page, count: Number.isInteger(page.count) && Number(page.count) >= 0 ? page.count! : null, next: page.next || null, previous: page.previous || null }
+}
+
+export function validId(value: string) { return /^[a-zA-Z0-9_-]{1,80}$/.test(value) }
+
+export function draftPayload(value: unknown): { subject: string; body: string; status: 'draft' } | null {
+  if (!value || typeof value !== 'object') return null
+  const data = value as Record<string, unknown>
+  if (typeof data.subject !== 'string' || !data.subject.trim() || data.subject.length > 200 || typeof data.body !== 'string' || byteLength(data.body) > 200_000 || data.status !== 'draft') return null
+  return { subject: data.subject.trim(), body: data.body, status: 'draft' }
+}
+
 export function safePage(value: string | null) {
   const page = Number(value || 1)
   return Number.isInteger(page) && page > 0 && page <= 100_000 ? page : null
-}
-
-export function isSafeEmailBody(body: string) {
-  return body.length <= 200_000
-    && !/<\s*(script|iframe|object|embed)\b/i.test(body)
-    && !/\s(?:href|src)\s*=\s*["']?\s*javascript:/i.test(body)
 }
 
 export function contextWithParams(context: RequestContext) {

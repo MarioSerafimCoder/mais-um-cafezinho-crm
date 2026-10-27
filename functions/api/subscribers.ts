@@ -1,4 +1,4 @@
-import { buttondown, errorResponse, json, safePage } from '../_utils'
+import { buttondown, errorResponse, json, safePage, pageResult } from '../_utils'
 import type { AppEnv } from '../_utils'
 
 type Context = { request: Request; env: AppEnv }
@@ -13,7 +13,7 @@ export const onRequestGet = async ({ request, env }: Context) => {
   if (emailAddress) params.set('email_address', emailAddress)
   try {
     const upstream = await buttondown({ request, env }, `/subscribers?${params}`) as { results?: unknown[]; count?: number; next?: string | null; previous?: string | null }
-    return json({ results: Array.isArray(upstream.results) ? upstream.results : [], count: Number.isFinite(upstream.count) ? upstream.count : null, next: upstream.next || null, previous: upstream.previous || null })
+    return json(pageResult(upstream))
   } catch (error) {
     return errorResponse(error)
   }

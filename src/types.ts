@@ -8,6 +8,14 @@ export type DraftRecord = {
   buttondownId?: string
   status: 'draft'
   updatedAt: string
+  schemaVersion?: 2
+  document?: import('../shared/safety').DocumentNode
+  revision?: number
+  cloudRevision?: number
+  lastCloudSavedAt?: string
+  lastSyncedAt?: string
+  syncedRevision?: number
+  createKey?: string
 }
 
 export type Subscriber = {
@@ -33,7 +41,8 @@ export type Campaign = {
 
 export type ApiPage<T> = {
   results: T[]
-  count: number
+  count: number | null
+  pageSize?: number
   next: string | null
   previous: string | null
 }
@@ -42,6 +51,8 @@ export type IntegrationStatus = {
   configured: boolean
   connected?: boolean
   demo: boolean
+  reason?: string
+  cloud?: boolean
 }
 
 export type DashboardSummary = {

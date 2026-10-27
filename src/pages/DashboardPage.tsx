@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, ArrowUpRight, PenLine, UsersRound, Mail, FileText, CalendarClock } from 'lucide-react'
-import { api } from '../lib/api'
+import { api, requireConnection } from '../lib/api'
 import { demoDashboard } from '../data/templates'
 import type { DashboardSummary } from '../types'
 import { Button, DemoNotice, ErrorState, LoadingState, PageTitle, StatusPill } from '../components/ui'
@@ -19,11 +19,7 @@ export function DashboardPage() {
 
   useEffect(() => {
     let active = true
-    void api.status().then((status) => status.configured ? api.dashboard() : demoDashboard)
-      .catch((cause: unknown) => {
-        if (cause instanceof Error && cause.message !== 'Failed to fetch') throw cause
-        return demoDashboard
-      })
+    void api.status().then(requireConnection).then((status) => status.demo ? demoDashboard : api.dashboard())
       .then((data) => { if (active) setSummary(data) })
       .catch((cause: unknown) => { if (active) setError(cause instanceof Error ? cause.message : 'Não foi possível carregar a visão geral.') })
     return () => { active = false }

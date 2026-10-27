@@ -1,6 +1,6 @@
 import type { ApiPage, Campaign, DashboardSummary, IntegrationStatus, Subscriber } from '../types'
 
-class ApiError extends Error {
+export class ApiError extends Error {
   readonly status: number
 
   constructor(message: string, status: number) {
@@ -20,13 +20,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   status: async () => {
-    try { return await request<IntegrationStatus>('/api/status') }
-    catch (error) {
-      if (error instanceof TypeError || (error instanceof ApiError && (error.status === 404 || error.status === 200))) {
-        return { configured: false, demo: true }
-      }
-      throw error
-    }
+    if (import.meta.env.DEV && import.meta.env.MODE === 'demo') return { configured: false, connected: false, demo: true, cloud: false }
+    return request<IntegrationStatus>('/api/status')
   },
   dashboard: () => request<DashboardSummary>('/api/dashboard'),
   subscribers: (page: number, search: string) => {
@@ -36,9 +31,9 @@ export const api = {
   },
   campaigns: (page = 1) => request<ApiPage<Campaign>>(`/api/emails?page=${page}`),
   campaign: (id: string) => request<Campaign>(`/api/emails/${encodeURIComponent(id)}`),
-  saveDraft: (payload: { id?: string; subject: string; body: string }) => request<Campaign>(payload.id ? `/api/emails/${encodeURIComponent(payload.id)}` : '/api/emails', {
+  saveDraft: (payload: { id?: string; subject: string; body: string; createKey?: string }) => request<Campaign>(payload.id ? `/api/emails/${encodeURIComponent(payload.id)}` : '/api/emails', {
     method: payload.id ? 'PATCH' : 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(!payload.id && payload.createKey ? { 'X-Idempotency-Key': payload.createKey } : {}) },
     body: JSON.stringify({ subject: payload.subject, body: payload.body, status: 'draft' }),
   }),
   uploadImage: async (file: File) => {
@@ -46,4 +41,9 @@ export const api = {
     form.append('image', file, file.name)
     return request<{ url: string }>('/api/images', { method: 'POST', body: form })
   },
+}
+
+export function requireConnection(status: IntegrationStatus) {
+  if (!status.demo && !status.connected) throw new Error(status.reason || 'A Buttondown está desconectada. Confira a integração nas configurações.')
+  return status
 }

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Coffee, LayoutDashboard, Mail, PenLine, UsersRound, PanelsTopLeft, Settings2, Menu, X, Sun, Moon, ArrowUpRight } from 'lucide-react'
 import { api } from '../lib/api'
-import { readSettings } from '../lib/storage'
+import { readSettings, writeSettings } from '../lib/storage'
 import type { IntegrationStatus } from '../types'
 import { StatusPill } from './ui'
 
@@ -18,7 +18,7 @@ const navigation = [
 export function AppLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [theme, setTheme] = useState(readSettings().theme)
-  const [integration, setIntegration] = useState<IntegrationStatus>({ configured: false, demo: true })
+  const [integration, setIntegration] = useState<IntegrationStatus | null>(null)
   const location = useLocation()
 
   useEffect(() => {
@@ -29,14 +29,16 @@ export function AppLayout() {
   }, [theme])
 
   useEffect(() => {
-    void api.status().then(setIntegration).catch(() => setIntegration({ configured: false, demo: true }))
+    let active = true
+    void api.status().then((value) => { if (active) setIntegration(value) }).catch(() => { if (active) setIntegration({ configured: false, connected: false, demo: false }) })
+    return () => { active = false }
   }, [location.pathname])
 
   const toggleTheme = () => {
     const next = theme === 'light' ? 'dark' : 'light'
     setTheme(next)
     const settings = readSettings()
-    localStorage.setItem('mais-um-cafezinho:settings:v1', JSON.stringify({ ...settings, theme: next }))
+    try { writeSettings({ ...settings, theme: next }) } catch { setTheme(theme); return }
     window.dispatchEvent(new Event('settings-changed'))
   }
 
@@ -53,7 +55,7 @@ export function AppLayout() {
       </NavLink>)}
     </nav>
     <div className="sidebar-bottom">
-      <div className="sidebar-integration"><span>INTEGRAÇÃO</span><StatusPill tone={integration.configured ? 'success' : 'warning'}>{integration.configured ? 'Buttondown' : 'Demonstração'}</StatusPill></div>
+      <div className="sidebar-integration"><span>INTEGRAÇÃO</span><StatusPill tone={integration?.connected ? 'success' : 'warning'}>{!integration ? 'Verificando' : integration.demo ? 'Demonstração' : integration.connected ? 'Buttondown conectada' : 'Desconectada'}</StatusPill></div>
       <a className="portfolio-link" href="https://marioserafim.com.br" target="_blank" rel="noreferrer">marioserafim.com.br <ArrowUpRight size={13} /></a>
       <div className="sidebar-author"><div className="author-monogram">MS</div><div><strong>Mário Serafim</strong><span>Direção de arte</span></div><button className="icon-button theme-toggle" aria-label={theme === 'light' ? 'Ativar tema escuro' : 'Ativar tema claro'} onClick={toggleTheme}>{theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}</button></div>
     </div>

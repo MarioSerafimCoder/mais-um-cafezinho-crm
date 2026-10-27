@@ -1,4 +1,4 @@
-import { buttondown, errorResponse, json, parseJson, isSafeEmailBody } from '../../_utils'
+import { buttondown, errorResponse, json, parseJson, isSafeEmailBody, draftPayload } from '../../_utils'
 import type { AppEnv } from '../../_utils'
 
 type Context = { request: Request; env: AppEnv; params: { id: string } }
@@ -31,7 +31,7 @@ export const onRequestGet = async ({ request, env, params }: Context) => {
 export const onRequestPatch = async ({ request, env, params }: Context) => {
   if (!validId(params.id)) return json({ error: 'Identificador inválido.' }, 400)
   try {
-    const data = await parseJson(request)
+    const data = draftPayload(await parseJson(request))
     if (!validDraft(data)) return json({ error: 'Apenas alterações em rascunhos são permitidas.' }, 400)
     const existing = await buttondown({ request, env }, `/emails/${encodeURIComponent(params.id)}`) as { status?: string }
     if (existing.status !== 'draft') return json({ error: 'Este email não é um rascunho e não pode ser alterado por este painel.' }, 409)

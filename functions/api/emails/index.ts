@@ -1,4 +1,4 @@
-import { buttondown, errorResponse, json, parseJson, safePage, isSafeEmailBody } from '../../_utils'
+import { buttondown, errorResponse, json, parseJson, safePage, isSafeEmailBody, draftPayload, pageResult } from '../../_utils'
 import type { AppEnv } from '../../_utils'
 
 type Context = { request: Request; env: AppEnv }
@@ -23,7 +23,7 @@ export const onRequestGet = async ({ request, env }: Context) => {
   if (status && ['draft', 'sent', 'scheduled'].includes(status)) params.set('status', status)
   try {
     const upstream = await buttondown({ request, env }, `/emails?${params}`) as { results?: unknown[]; count?: number; next?: string | null; previous?: string | null }
-    return json({ results: Array.isArray(upstream.results) ? upstream.results : [], count: Number.isFinite(upstream.count) ? upstream.count : null, next: upstream.next || null, previous: upstream.previous || null })
+    return json(pageResult(upstream))
   } catch (error) {
     return errorResponse(error)
   }
@@ -31,11 +31,13 @@ export const onRequestGet = async ({ request, env }: Context) => {
 
 export const onRequestPost = async ({ request, env }: Context) => {
   try {
-    const data = await parseJson(request)
+    const data = draftPayload(await parseJson(request))
     if (!validDraft(data)) return json({ error: 'Rascunho inválido. Confira assunto, conteúdo e status.' }, 400)
+    const key = request.headers.get('X-Idempotency-Key')
+    if (!key || !/^[a-zA-Z0-9_-]{16,200}$/.test(key)) return json({ error: 'Identificador de criação ausente ou inválido. Salve o rascunho localmente e tente novamente.' }, 400)
     const result = await buttondown({ request, env }, '/emails', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Idempotency-Key': key },
       body: JSON.stringify(data),
     })
     return json(result, 201)

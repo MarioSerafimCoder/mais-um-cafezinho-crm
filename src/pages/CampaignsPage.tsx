@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Copy, ExternalLink, FilePlus2, PenLine, ChevronLeft, ChevronRight } from 'lucide-react'
-import { api } from '../lib/api'
+import { api, requireConnection } from '../lib/api'
 import { demoCampaigns } from '../data/templates'
 import { readDrafts, writeDraft } from '../lib/storage'
 import type { Campaign } from '../types'
@@ -37,7 +37,7 @@ export function CampaignsPage() {
   useEffect(() => {
     let active = true
     const requestKey = `${page}:${reload}`
-    void api.status().then(async (status) => {
+    void api.status().then(requireConnection).then(async (status) => {
       if (status.configured) {
         const remote = await api.campaigns(page)
         if (!active) return
@@ -82,7 +82,7 @@ export function CampaignsPage() {
     {loading && <LoadingState label="Carregando campanhas…" />}
     {!loading && !error && campaigns.length === 0 && <EmptyState title="Ainda não há campanhas." description="Todo arquivo começa com uma primeira página. Escolha um template e comece a escrever." action={<Link to="/templates"><Button>Escolher template</Button></Link>} />}
     {!loading && !error && campaigns.length > 0 && <div className="campaigns-wrap">
-      <div className="campaign-summary"><span><strong>{drafts.length}</strong> rascunhos</span><span><strong>{scheduled.length}</strong> agendadas</span><span><strong>{sent.length}</strong> publicadas</span></div>
+      <div className="campaign-summary"><span>Nesta página e neste navegador:</span><span><strong>{drafts.length}</strong> rascunhos</span><span><strong>{scheduled.length}</strong> agendadas</span><span><strong>{sent.length}</strong> publicadas</span></div>
       <div className="campaign-list">
         {campaigns.map((campaign) => {
           const editable = campaign.status === 'draft'
