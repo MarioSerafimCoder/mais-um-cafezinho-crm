@@ -17,7 +17,7 @@ React, TypeScript, Vite, Tailwind CSS 4, React Email Editor, Cloudflare Pages Fu
 
 ## Rodar localmente
 
-Requer Node.js compatível com Vite 8 e pnpm.
+Requer Node.js 24.18.0 e pnpm 11.25.0.
 
 ```sh
 pnpm install
@@ -30,14 +30,23 @@ O Vite abre o painel em modo de demonstração. Para validar o projeto:
 pnpm test
 pnpm lint
 pnpm build
+pnpm exec playwright install chromium
+pnpm test:e2e
 ```
 
-Para exercitar as Pages Functions localmente, copie `.dev.vars.example` para `.dev.vars`, defina `LOCAL_ACCESS_BYPASS=true` e, se desejar testar a integração, forneça uma chave da Buttondown. Use esse bypass apenas no servidor local iniciado por `pnpm pages:dev`.
+Para exercitar as Pages Functions com recuperação de documentos no D1 **local**, use os comandos abaixo. Não é criada infraestrutura remota. O banco de revisão fica em `.wrangler/editor-local`; os testes usam `.wrangler/editor-test`, separado. A demonstração fica identificada. Se desejar consultar a integração localmente, use apenas `.dev.vars` para a chave da Buttondown (nunca variáveis `VITE_*`).
 
 ```sh
 pnpm build
-pnpm pages:dev
+pnpm db:local
+pnpm pages:local
 ```
+
+O ambiente completo abre em `http://127.0.0.1:8788`. Para desenvolvimento com atualização automática da interface, mantenha esse servidor e execute `pnpm dev:api` em outro terminal. O bypass exige simultaneamente host de loopback, `ENVIRONMENT=development` e `LOCAL_ACCESS_BYPASS=true`; nunca funciona no domínio de produção.
+
+## Fase 2 — auditoria e estabilização local
+
+As alterações desta fase estão na branch local `phase-2-editor-stability`, sem publicação ou alteração de DNS. Veja [o relatório de auditoria](docs/FASE-2-AUDITORIA.md). O editor mantém o documento estruturado como fonte de edição e gera HTML para a prévia/rascunho Buttondown. Rascunhos antigos conservam o HTML original e recebem backup antes da migração. A recuperação por D1 está implementada e testada localmente; o banco ainda precisa ser configurado em produção numa etapa futura autorizada.
 
 ## Configuração de produção
 
