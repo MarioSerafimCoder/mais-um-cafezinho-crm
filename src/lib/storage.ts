@@ -18,16 +18,17 @@ export function readDrafts(): DraftRecord[] {
   try {
     const raw = localStorage.getItem(draftsKey)
     const parsed = raw ? JSON.parse(raw) : []
-    if (!Array.isArray(parsed) || parsed.some((item) => !item || typeof item.id !== 'string' || typeof item.content !== 'string')) throw new Error()
+    if (!Array.isArray(parsed) || parsed.some((item) => !item || typeof item.id !== 'string' || typeof item.content !== 'string' || typeof item.subject !== 'string' || typeof item.updatedAt !== 'string' || item.status !== 'draft' || (item.buttondownId !== undefined && typeof item.buttondownId !== 'string'))) throw new Error()
     return parsed
   } catch {
     throw new Error('Não foi possível ler os rascunhos deste navegador. Os dados originais foram preservados; exporte um backup antes de recuperar o armazenamento.')
   }
 }
 
-export function writeDraft(draft: DraftRecord) {
+export function writeDraft(draft: DraftRecord, expected?: DraftRecord | null) {
   const drafts = readDrafts()
   const existing = drafts.find((item) => item.id === draft.id || (draft.buttondownId && item.buttondownId === draft.buttondownId))
+  if (expected !== undefined && JSON.stringify(existing || null) !== JSON.stringify(expected)) throw new Error('Este rascunho mudou em outra aba. Exporte sua cópia antes de reabrir; nada foi sobrescrito.')
   if (existing && (existing.revision || 0) > (draft.revision || 0)) throw new Error('Outra edição mais recente foi salva. Reabra o rascunho antes de continuar.')
   const raw = localStorage.getItem(draftsKey)
   if (raw && drafts.some((item) => !item.schemaVersion) && !localStorage.getItem(`${draftsKey}:legacy-backup`)) localStorage.setItem(`${draftsKey}:legacy-backup`, raw)
@@ -44,18 +45,29 @@ export function downloadDraftBackup() {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
+
 export function removeDraft(id: string) {
   localStorage.setItem(draftsKey, JSON.stringify(readDrafts().filter((draft) => draft.id !== id)))
 }
 
 export function readSettings(): NewsletterSettings {
   try {
-    return { ...defaultSettings, ...JSON.parse(localStorage.getItem(settingsKey) || '{}') }
+    const saved = JSON.parse(localStorage.getItem(settingsKey) || '{}') as Record<string, unknown>
+    const clean = { ...defaultSettings }
+    for (const key of Object.keys(defaultSettings) as Array<keyof NewsletterSettings>) if (typeof saved[key] === 'string') Object.assign(clean, { [key]: saved[key] })
+    clean.theme = saved.theme === 'dark' ? 'dark' : 'light'
+    if (Number.isInteger(saved.cloudRevision) && Number(saved.cloudRevision) >= 0) clean.cloudRevision = Number(saved.cloudRevision)
+    return clean
   } catch {
     return defaultSettings
   }
 }
 
 export function writeSettings(settings: NewsletterSettings) {
+  const raw = localStorage.getItem(settingsKey)
+  if (raw) {
+    try { const parsed = JSON.parse(raw); if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error() }
+    catch { throw new Error('As configurações locais estão corrompidas. Os dados originais foram preservados.') }
+  }
   localStorage.setItem(settingsKey, JSON.stringify(settings))
 }

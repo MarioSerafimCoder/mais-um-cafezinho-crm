@@ -1,7 +1,7 @@
 name: Verificar CRM
 on:
   push:
-    branches: [main]
+    branches: [main, phase-2-editor-stability]
   pull_request:
 permissions:
   contents: read
@@ -21,3 +21,8 @@ jobs:
       - run: pnpm build
       - name: Compilar Pages Functions
         run: pnpm exec wrangler pages functions build --outdir .wrangler/functions-check
+      - name: Preparar testes locais de integração
+        run: |
+          pnpm exec playwright install --with-deps chromium
+      - name: Testar fluxos críticos no navegador e D1 local
+        run: pnpm test:e2e

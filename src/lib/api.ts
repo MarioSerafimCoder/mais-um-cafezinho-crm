@@ -1,4 +1,4 @@
-import type { ApiPage, Campaign, DashboardSummary, IntegrationStatus, Subscriber } from '../types'
+import type { ApiPage, Campaign, DashboardSummary, DraftRecord, IntegrationStatus, NewsletterSettings, Subscriber } from '../types'
 
 export class ApiError extends Error {
   readonly status: number
@@ -11,7 +11,9 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, { ...init, headers: { ...(init?.headers || {}) } })
+  let response: Response
+  try { response = await fetch(path, { ...init, headers: { ...(init?.headers || {}) } }) }
+  catch { throw new ApiError('Sem conexão com o servidor. Os rascunhos deste navegador continuam disponíveis.', 0) }
   const payload = await response.json().catch(() => null)
   if (!response.ok) throw new ApiError(payload?.error || `Falha na solicitação (${response.status}).`, response.status)
   if (!payload || typeof payload !== 'object') throw new ApiError('A resposta da API está vazia ou inválida.', response.status)
@@ -24,6 +26,11 @@ export const api = {
     return request<IntegrationStatus>('/api/status')
   },
   dashboard: () => request<DashboardSummary>('/api/dashboard'),
+  cloudDrafts: (page = 1) => request<{ results: Array<Pick<DraftRecord, 'id' | 'subject' | 'buttondownId' | 'updatedAt' | 'cloudRevision'>>; next: number | null }>(`/api/drafts?page=${page}`),
+  cloudDraft: (id: string) => request<DraftRecord>(`/api/drafts/${encodeURIComponent(id)}`),
+  saveCloudDraft: (draft: DraftRecord) => request<DraftRecord>(`/api/drafts/${encodeURIComponent(draft.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draft) }),
+  cloudSettings: () => request<NewsletterSettings & { cloudRevision: number }>('/api/settings'),
+  saveCloudSettings: (settings: NewsletterSettings & { cloudRevision?: number }) => request<NewsletterSettings & { cloudRevision: number }>('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) }),
   subscribers: (page: number, search: string) => {
     const params = new URLSearchParams({ page: String(page) })
     if (search.trim()) params.set('email_address', search.trim())

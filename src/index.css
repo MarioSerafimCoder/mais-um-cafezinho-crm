@@ -297,6 +297,7 @@ a { color: inherit; text-decoration: none; }
 .email-editor-container .tiptap blockquote { padding: 4px 0 4px 17px; color: #5f5a52; border-left: 2px solid #d84a3d; }
 .email-editor-container .tiptap a { color: #b6362c; text-decoration: underline; }
 .email-editor-container .tiptap img { max-width: 100%; height: auto; }
+.email-editor-container .tiptap .node-container { width: 100% !important; max-width: 100% !important; min-width: 0 !important; }
 .email-editor-container .tiptap p.is-editor-empty:first-child::before { color: #a9a49a; content: attr(data-placeholder); float: left; height: 0; pointer-events: none; }
 .email-preview-frame { display: flex; justify-content: center; min-height: 590px; padding: 24px; }
 .email-preview-frame iframe { width: min(100%, 680px); min-height: 540px; background: #fff; border: 0; box-shadow: 0 5px 20px rgba(35, 34, 32, .1); }
@@ -338,6 +339,28 @@ a { color: inherit; text-decoration: none; }
 .editor-bottom-bar .status-pill { font-size: 8px; }
 .safe-footer-copy { color: var(--ink-3); font-size: 9px; }
 .editor-bottom-bar .button { min-height: 31px; font-size: 9px; }
+
+.insert-menu { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.insert-menu select, .editor-inspector input { width: 100%; min-height: 34px; padding: 7px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 3px; font-size: 11px; }
+.editor-save-state[data-state='alterado'] { color: var(--amber); }
+.editor-save-state[data-state='erro'] { color: var(--red); }
+.editor-inspector details > summary { cursor: pointer; font-size: 12px; font-weight: 600; margin-bottom: 10px; }
+.media-controls { display: contents; }
+.editor-inspector .button { white-space: normal; }
+.block-outline { max-height: 210px; overflow: auto; padding: 0; list-style: none; margin: 8px 0 0; }
+.block-outline button { display: block; width: 100%; padding: 5px; border: 0; background: transparent; color: var(--ink-2); text-align: left; font-size: 10px; cursor: pointer; }
+.block-outline button[aria-current='true'] { background: var(--red-soft); color: var(--red); }
+.editor-dialog-backdrop { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; padding: 20px; background: rgb(0 0 0 / .5); }
+.editor-dialog { width: min(100%, 520px); padding: 26px; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 8px 40px rgb(0 0 0 / .2); }
+.editor-dialog h2 { font-family: Georgia, serif; }
+.editor-dialog p { font-size: 13px; line-height: 1.6; }
+.editor-dialog .button { margin: 8px 8px 0 0; }
+.settings-cloud-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 15px 0; }
+.recovery-import { margin: 0 0 18px; padding: 12px; background: var(--surface); border: 1px solid var(--line); font-size: 12px; }
+.recovery-import summary { cursor: pointer; }
+.recovery-import p { max-width: 700px; color: var(--ink-3); }
+.template-real-preview { position: relative; overflow: hidden; height: 230px; background: #fff; }
+.template-real-preview iframe { position: absolute; top: 8px; left: 10px; width: 640px; height: 900px; border: 1px solid #ddd; transform: scale(.43); transform-origin: top left; pointer-events: none; }
 
 @media (max-width: 1150px) {
   .sidebar { width: 224px; }

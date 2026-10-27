@@ -80,5 +80,6 @@ describe('proteção do CRM em produção', () => {
     for (const host of ['localhost', '127.0.0.1', '[::1]']) {
       expect((await call(`http://${host}:8788/`, config).response).status).toBe(200)
     }
+    expect((await call('http://127.0.0.1:8788/', { ...config, ENVIRONMENT: 'production' }).response).status).toBe(401)
   })
 })

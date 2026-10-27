@@ -16,6 +16,8 @@ export type DraftRecord = {
   lastSyncedAt?: string
   syncedRevision?: number
   createKey?: string
+  cloudSavedRevision?: number
+  pendingCreate?: { key: string; subject: string; body: string; revision: number }
 }
 
 export type Subscriber = {
@@ -37,6 +39,7 @@ export type Campaign = {
   absolute_url?: string | null
   buttondownId?: string
   demo?: boolean
+  origin?: 'local' | 'cloud'
 }
 
 export type ApiPage<T> = {
@@ -75,4 +78,5 @@ export type NewsletterSettings = {
   instagramUrl: string
   linkedinUrl: string
   theme: 'light' | 'dark'
+  cloudRevision?: number
 }

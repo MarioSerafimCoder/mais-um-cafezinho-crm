@@ -14,10 +14,16 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "pages:dev": "wrangler pages dev dist",
-    "test": "vitest run"
+    "pages:local": "wrangler pages dev dist --ip 127.0.0.1 --port 8788 --persist-to .wrangler/editor-local --d1 DB=00000000-0000-0000-0000-000000000001 --binding ENVIRONMENT=development --binding LOCAL_ACCESS_BYPASS=true --binding DEMO_MODE=true",
+    "pages:test": "wrangler pages dev dist --ip 127.0.0.1 --port 8788 --persist-to .wrangler/editor-test --d1 DB=00000000-0000-0000-0000-000000000001 --binding ENVIRONMENT=development --binding LOCAL_ACCESS_BYPASS=true --binding DEMO_MODE=true",
+    "db:local": "wrangler d1 migrations apply DB --local --config wrangler.local.toml --persist-to .wrangler/editor-local",
+    "db:test": "wrangler d1 migrations apply DB --local --config wrangler.local.toml --persist-to .wrangler/editor-test",
+    "test": "vitest run",
+    "test:e2e": "pnpm db:test && playwright test"
   },
   "dependencies": {
     "@react-email/editor": "^1.7.14",
+    "@tiptap/pm": "3.32.0",
     "hast-util-from-html": "^2.0.3",
     "lucide-react": "^1.61.0",
     "react": "^19.3.1",

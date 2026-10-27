@@ -1,4 +1,4 @@
-import { buttondown, errorResponse, json } from '../_utils'
+import { buttondown, errorResponse, json, pageResult } from '../_utils'
 import type { AppEnv } from '../_utils'
 
 export const onRequestGet = async ({ request, env }: { request: Request; env: AppEnv }) => {
@@ -7,7 +7,7 @@ export const onRequestGet = async ({ request, env }: { request: Request; env: Ap
   const demo = !configured && local && env.ENVIRONMENT === 'development' && env.DEMO_MODE === 'true'
   if (!configured) return json({ configured, connected: false, demo, cloud: Boolean(env.DB), reason: demo ? 'Demonstração local' : 'Chave Buttondown não configurada.' })
   try {
-    await buttondown({ request, env }, '/subscribers?page=1')
+    pageResult(await buttondown({ request, env }, '/subscribers?page=1'))
     return json({ configured: true, connected: true, demo: false, cloud: Boolean(env.DB) })
   } catch (error) {
     const failure = errorResponse(error)
