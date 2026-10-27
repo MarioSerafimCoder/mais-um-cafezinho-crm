@@ -1,0 +1,6 @@
+name = "mais-um-cafezinho-crm"
+pages_build_output_dir = "./dist"
+compatibility_date = "2026-10-27"
+
+[vars]
+# Configure CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD in the Cloudflare Pages dashboard.

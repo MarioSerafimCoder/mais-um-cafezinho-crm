@@ -1,0 +1,6 @@
+# Copy to .dev.vars for local Pages Functions development.
+# Keep this file free of real credentials; .dev.vars is ignored by Git.
+BUTTONDOWN_API_KEY=
+CF_ACCESS_TEAM_DOMAIN=
+CF_ACCESS_AUD=
+LOCAL_ACCESS_BYPASS=true
