@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { ExternalLink, Save, ShieldCheck, KeyRound } from 'lucide-react'
 import { api } from '../lib/api'
 import { readSettings, writeSettings } from '../lib/storage'
@@ -7,15 +7,20 @@ import { Button, Field, PageTitle, StatusPill, SuccessMessage } from '../compone
 
 export function SettingsPage() {
   const [settings, setSettings] = useState<NewsletterSettings>(readSettings())
-  const [status, setStatus] = useState<IntegrationStatus>({ configured: false, demo: true })
+  const latest = useRef(settings)
+  const [status, setStatus] = useState<IntegrationStatus>({ configured: false, connected: false, demo: false })
+  const [error, setError] = useState('')
+  const [cloudBusy, setCloudBusy] = useState(false)
+  const [remote, setRemote] = useState<NewsletterSettings | null>(null)
+  const [message, setMessage] = useState('')
   const [saved, setSaved] = useState(false)
 
-  useEffect(() => { void api.status().then(setStatus).catch(() => setStatus({ configured: false, demo: true })) }, [])
+  useEffect(() => { let active = true; void api.status().then((value) => { if (active) setStatus(value) }).catch(() => { if (active) setError('Não foi possível verificar a conexão. As configurações deste navegador continuam disponíveis.') }); return () => { active = false } }, [])
 
-  const update = (key: keyof NewsletterSettings, value: string) => setSettings((current) => ({ ...current, [key]: value }))
+  const update = (key: keyof NewsletterSettings, value: string) => { const next = { ...latest.current, [key]: value }; latest.current = next; setSettings(next); setSaved(false) }
   const save = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    writeSettings(settings)
+    try { writeSettings(settings) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Falha ao salvar.'); return }
     window.dispatchEvent(new Event('settings-changed'))
     setSaved(true)
     window.setTimeout(() => setSaved(false), 2800)
@@ -23,6 +28,8 @@ export function SettingsPage() {
 
   return <>
     <PageTitle eyebrow="AJUSTES DO ESTÚDIO" title="Configurações" description="A identidade do Cafezinho, com os detalhes que fazem a casa funcionar." />
+    {error && <p className="editor-inline-error" role="alert">{error}</p>}
+    {message && <p role="status">{message}</p>}
     <form className="settings-form" onSubmit={save}>
       <section className="settings-section">
         <div className="settings-section-title"><span>01</span><div><h2>Identidade</h2><p>Informações que aparecem nas edições e na interface.</p></div></div>
@@ -47,10 +54,11 @@ export function SettingsPage() {
     <section className="integration-section">
       <div className="settings-section-title"><span>03</span><div><h2>Buttondown</h2><p>Credenciais protegidas nas Pages Functions do Cloudflare.</p></div></div>
       <div className="integration-card">
-        <div className="integration-card-icon"><KeyRound size={19} /></div><div className="integration-card-copy"><strong>{status.configured ? 'Chave configurada' : 'Chave ainda não configurada'}</strong><span>{status.configured ? 'A chave não é exibida neste painel. A conexão será confirmada na próxima consulta.' : 'Configure BUTTONDOWN_API_KEY no ambiente do Cloudflare Pages. Nada de colar segredos aqui.'}</span></div><StatusPill tone={status.configured ? 'success' : 'warning'}>{status.configured ? 'Configurada' : 'Demonstração'}</StatusPill>
+        <div className="integration-card-icon"><KeyRound size={19} /></div><div className="integration-card-copy"><strong>{status.connected ? 'Conexão confirmada' : status.configured ? 'Chave configurada, conexão indisponível' : 'Chave ainda não configurada'}</strong><span>{status.reason || 'A chave fica exclusivamente no servidor. A verificação consulta a lista de assinantes sem alterá-la.'}</span></div><StatusPill tone={status.connected ? 'success' : 'warning'}>{status.demo ? 'Demonstração' : status.connected ? 'Conectada' : 'Desconectada'}</StatusPill>
       </div>
       <div className="security-copy"><ShieldCheck size={16} /><p>As rotas são protegidas por Cloudflare Access e validam o token JWT em cada solicitação. O painel nunca recebe a chave da API.</p></div>
       <a className="subtle-link external-doc" href="https://docs.buttondown.com/api-authentication" target="_blank" rel="noreferrer">Documentação de autenticação <ExternalLink size={13} /></a>
     </section>
+    <section className="integration-section"><h2>Recuperação entre dispositivos</h2><p>{status.cloud ? 'Banco editorial disponível. Só documentos e configurações são armazenados; assinantes continuam exclusivamente na Buttondown.' : 'O banco editorial não está configurado neste ambiente. As configurações continuam neste navegador.'}</p><div className="settings-cloud-actions"><Button variant="outline" disabled={!status.cloud || cloudBusy} onClick={() => { setCloudBusy(true); setError(''); const snapshot = { ...latest.current }; void api.saveCloudSettings(snapshot).then((result) => { const next = { ...latest.current, cloudRevision: result.cloudRevision }; writeSettings(next); latest.current = next; setSettings(next); setMessage('Configurações enviadas à nuvem. Alterações feitas durante a gravação continuam nesta cópia local.') }).catch((cause) => setError(cause instanceof Error ? cause.message : 'Falha na nuvem.')).finally(() => setCloudBusy(false)) }}>Salvar configurações na nuvem</Button><Button variant="outline" disabled={!status.cloud || cloudBusy} onClick={() => { setCloudBusy(true); setError(''); void api.cloudSettings().then(setRemote).catch((cause) => setError(cause instanceof Error ? cause.message : 'Falha ao recuperar.')).finally(() => setCloudBusy(false)) }}>Consultar cópia da nuvem</Button></div>{remote && <div className="editor-inline-success"><span>Cópia remota: {remote.newsletterName} · {remote.senderName}</span><Button size="sm" onClick={() => { try { writeSettings(remote); latest.current = remote; setSettings(remote); setRemote(null); window.dispatchEvent(new Event('settings-changed')) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Falha ao aplicar.') } }}>Usar estas configurações</Button><Button size="sm" variant="quiet" onClick={() => setRemote(null)}>Manter minha cópia</Button></div>}</section>
   </>
 }

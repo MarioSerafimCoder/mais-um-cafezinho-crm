@@ -1,5 +1,5 @@
 import type { Campaign, DashboardSummary, NewsletterSettings, NewsletterTemplateId, Subscriber } from '../types'
-import { escapeHtml, safeUrl } from '../../shared/safety'
+import { escapeHtml, safeUrl } from '../../shared/urls'
 
 export type NewsletterTemplate = {
   id: NewsletterTemplateId
