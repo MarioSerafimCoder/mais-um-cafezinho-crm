@@ -118,6 +118,11 @@ export function EditorPage() {
     saveTimer.current = window.setTimeout(() => { void persistLocal(ref) }, 700)
   }, [persistLocal])
 
+  const attachEditor = useCallback((ref: EmailEditorRef | null) => {
+    editorRef.current = ref
+    if (ref) scheduleAutosave(ref)
+  }, [scheduleAutosave])
+
   useEffect(() => () => { if (saveTimer.current) window.clearTimeout(saveTimer.current) }, [])
 
   useEffect(() => {
@@ -206,7 +211,8 @@ export function EditorPage() {
         <div className="editor-toolbar"><div className="toolbar-group"><button className="toolbar-button" onClick={() => insertHtml('<h2>Nova seção</h2><p>Comece a escrever por aqui.</p>')}><Type size={15} /><span>Seção</span></button><button className="toolbar-button" onClick={() => insertHtml('<p>Novo parágrafo. Desenvolva a ideia com calma.</p>')}><TextCursorInput size={15} /><span>Texto</span></button><button className="toolbar-button" onClick={() => editorRef.current?.editor?.chain().focus().setButton().run()}><Link2 size={15} /><span>Botão</span></button><button className="toolbar-button" onClick={addImage}><ImagePlus size={15} /><span>Imagem</span></button><button className="toolbar-button" onClick={() => insertHtml('<hr />')}><Minus size={15} /><span>Divisória</span></button><button className="toolbar-button" onClick={() => insertHtml('<blockquote><p>Um destaque, uma frase, uma pausa.</p></blockquote>')}><Quote size={15} /><span>Destaque</span></button></div><div className="toolbar-group toolbar-history"><button className="icon-button" aria-label="Desfazer" onClick={() => editorRef.current?.editor?.chain().focus().undo().run()}><Undo2 size={16} /></button><button className="icon-button" aria-label="Refazer" onClick={() => editorRef.current?.editor?.chain().focus().redo().run()}><Redo2 size={16} /></button></div></div>
         <div className={`editor-canvas${previewing ? ' is-preview' : ''}`}>
           <div className="canvas-ruler"><span>{previewing ? 'PRÉVIA DA NEWSLETTER' : 'EDIÇÃO EM CURSO'}</span><div className="canvas-view-actions"><button className={!previewing ? 'selected' : ''} onClick={() => void setPreview(false)}><PenLineIcon />Escrever</button><button className={previewing ? 'selected' : ''} onClick={() => void setPreview(true)}><Eye size={14} />Prévia</button></div></div>
-          {previewing ? <div className={`email-preview-frame ${previewDevice}`}><iframe title="Prévia da newsletter" sandbox="" referrerPolicy="no-referrer" srcDoc={html} /></div> : <div className="email-editor-container"><EmailEditor key={draft.id + initialContent.slice(0, 20)} ref={(ref) => { editorRef.current = ref; if (ref) scheduleAutosave(ref) }} onReady={(ref) => { editorRef.current = ref; scheduleAutosave(ref) }} onUpdate={scheduleAutosave} extensions={editorExtensions} content={initialContent} theme="basic" placeholder="Pressione / para inserir um bloco" /></div>}
+          {previewing && <div className={`email-preview-frame ${previewDevice}`}><iframe title="Prévia da newsletter" sandbox="" referrerPolicy="no-referrer" srcDoc={html} /></div>}
+          <div className="email-editor-container" style={{ display: previewing ? 'none' : undefined }}><EmailEditor key={draft.id + initialContent.slice(0, 20)} ref={attachEditor} onReady={attachEditor} onUpdate={scheduleAutosave} extensions={editorExtensions} content={initialContent} theme="basic" placeholder="Pressione / para inserir um bloco" /></div>
           {previewing && <div className="preview-device-controls"><span>Visualizar em</span><button className={previewDevice === 'desktop' ? 'active' : ''} onClick={() => setPreviewDevice('desktop')}><Monitor size={14} />Desktop</button><button className={previewDevice === 'mobile' ? 'active' : ''} onClick={() => setPreviewDevice('mobile')}><Smartphone size={14} />Celular</button></div>}
         </div>
         <div className="editor-canvas-footer"><span><span className="autosave-dot" />Salvo automaticamente neste navegador</span><span>HTML responsivo · descadastro Buttondown incluído</span></div>
