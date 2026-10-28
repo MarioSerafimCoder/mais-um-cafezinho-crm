@@ -37,6 +37,9 @@ export const api = {
     if (type) params.set('type', type)
     return request<ApiPage<Subscriber>>(`/api/subscribers?${params}`)
   },
+  createSubscriber: (emailAddress: string) => request<Pick<Subscriber, 'id' | 'email_address' | 'type' | 'creation_date'>>('/api/subscribers', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email_address: emailAddress }),
+  }),
   campaignDeliveryStatus: () => request<CampaignDeliveryStatus>('/api/campaign-delivery'),
   campaignDelivery: (payload: Record<string, unknown>) => request<Partial<PreparedCampaignDelivery> & { accepted?: boolean; cancelled?: boolean; error?: string }>('/api/campaign-delivery', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
   campaigns: (page = 1) => request<ApiPage<Campaign>>(`/api/emails?page=${page}`),

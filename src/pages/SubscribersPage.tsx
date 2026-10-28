@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Search, ChevronLeft, ChevronRight, Download, UserRound } from 'lucide-react'
+import type { FormEvent } from 'react'
+import { Search, ChevronLeft, ChevronRight, ShieldCheck, UserRound, UserPlus, Mail, CircleCheck } from 'lucide-react'
 import { api, requireConnection } from '../lib/api'
 import { demoSubscribers } from '../data/templates'
 import type { ApiPage, IntegrationStatus, Subscriber } from '../types'
-import { DemoNotice, ErrorState, LoadingState, PageTitle, StatusPill } from '../components/ui'
+import { Button, DemoNotice, ErrorState, LoadingState, PageTitle, StatusPill } from '../components/ui'
 
 const pageSize = 25
 
@@ -33,6 +34,10 @@ export function SubscribersPage() {
   const [loadedKey, setLoadedKey] = useState('')
   const [error, setError] = useState('')
   const [reload, setReload] = useState(0)
+  const [newEmail, setNewEmail] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState('')
+  const [createMessage, setCreateMessage] = useState('')
 
   useEffect(() => {
     const handle = window.setTimeout(() => { setQuery(search.trim()); setPage(1) }, 250)
@@ -64,9 +69,40 @@ export function SubscribersPage() {
   const visibleError = loading ? '' : error
   const activeRows = useMemo(() => pageData?.results || [], [pageData])
 
+  const createSubscriber = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!status?.configured || creating) return
+    setCreating(true); setCreateError(''); setCreateMessage('')
+    try {
+      const subscriber = await api.createSubscriber(newEmail)
+      setNewEmail('')
+      setPage(1)
+      setSearch(subscriber.email_address)
+      setReload((value) => value + 1)
+      setCreateMessage(subscriber.type === 'unactivated'
+        ? `Cadastro criado. A Buttondown enviará uma confirmação para ${subscriber.email_address}; o status ficará pendente até a confirmação.`
+        : `Assinante cadastrado: ${subscriber.email_address}.`)
+    } catch (cause) {
+      setCreateError(cause instanceof Error ? cause.message : 'Não foi possível cadastrar este assinante.')
+    } finally { setCreating(false) }
+  }
+
   return <>
     <PageTitle eyebrow="LISTA DE LEITORES" title="Assinantes" description="Uma boa lista cresce com consentimento — e sem atalhos esquisitos." />
     {status?.demo && <DemoNotice />}
+    {status?.configured && <section className="subscriber-create-panel" aria-labelledby="subscriber-create-title">
+      <div className="subscriber-create-heading">
+        <span className="subscriber-create-icon"><UserPlus size={18} /></span>
+        <div><h2 id="subscriber-create-title">Cadastro manual</h2><p>Adicione um endereço. A Buttondown pedirá confirmação antes de ativar a inscrição.</p></div>
+      </div>
+      <form className="subscriber-create-form" onSubmit={(event) => void createSubscriber(event)}>
+        <label className="field"><span className="field-label">E-mail do assinante</span><span className="subscriber-email-input"><Mail size={15} /><input type="email" autoComplete="email" required maxLength={254} value={newEmail} onChange={(event) => setNewEmail(event.target.value)} placeholder="nome@exemplo.com" disabled={creating} /></span></label>
+        <Button type="submit" size="sm" icon={creating ? undefined : <UserPlus size={15} />} disabled={creating || !newEmail.trim()}>{creating ? 'Cadastrando…' : 'Cadastrar assinante'}</Button>
+      </form>
+      {createError && <p className="subscriber-create-feedback subscriber-create-error" role="alert">{createError}</p>}
+      {createMessage && <p className="subscriber-create-feedback subscriber-create-success" role="status"><CircleCheck size={15} />{createMessage}</p>}
+    </section>}
+    {status && !status.configured && <p className="subscriber-create-demo-note" role="status">O cadastro manual fica disponível quando a integração Buttondown está conectada.</p>}
     <section className="subscriber-toolbar">
       <label className="search-box"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por e-mail" aria-label="Buscar por e-mail" /><kbd>⌘ K</kbd></label>
       <span className="subscriber-count">{pageData ? `${pageData.count?.toLocaleString('pt-BR') ?? '—'} registros` : '—'}</span>
@@ -84,7 +120,7 @@ export function SubscribersPage() {
       </tbody></table></div>
       {activeRows.length === 0 && <div className="table-empty">{query ? `Nenhum assinante encontrado para “${query}”.` : 'Nenhum assinante nesta página.'}</div>}
       <div className="table-pagination"><span>{activeRows.length} registros nesta página · {pageData?.count?.toLocaleString('pt-BR') ?? '—'} no total</span><div><button className="icon-button" aria-label="Página anterior" disabled={page <= 1 || loading} onClick={() => setPage((value) => Math.max(1, value - 1))}><ChevronLeft size={17} /></button><span className="page-indicator">Página {page}</span><button className="icon-button" aria-label="Próxima página" disabled={!pageData?.next || loading} onClick={() => setPage((value) => value + 1)}><ChevronRight size={17} /></button></div></div>
-      <p className="privacy-note"><Download size={14} /> Esta tela é somente leitura. Descadastrados nunca são reativados nem importados por aqui.</p>
+      <p className="privacy-note"><ShieldCheck size={14} /> Descadastrados não são reativados por este formulário. Novos cadastros aguardam a confirmação do assinante.</p>
     </>}
   </>
 }
