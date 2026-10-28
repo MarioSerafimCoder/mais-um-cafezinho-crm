@@ -32,7 +32,11 @@ function styleEditorialContent(content: string) {
     if (tag === 'h3') addDefaultStyle(element, { 'font-family': 'Arial, Helvetica, sans-serif', 'font-size': '16px', 'line-height': '1.4', color: '#171717', margin: '24px 0 8px' })
     if (tag === 'a') addDefaultStyle(element, { color: '#b52930', 'text-decoration': 'underline' })
     if (tag === 'blockquote') addDefaultStyle(element, { 'background-color': '#f6f2ef', 'border-left': '3px solid #b52930', margin: '26px 0', padding: '14px 18px' })
-    if (tag === 'img') addDefaultStyle(element, { display: 'block', width: 'auto', 'max-width': '100%', height: 'auto', border: '0', margin: '22px 0' })
+    if (tag === 'img') addDefaultStyle(element, { display: 'block', width: 'auto', 'max-width': '100%', height: 'auto', border: '0', margin: '22px auto' })
+    if (tag === 'a' && element.style.display === 'inline-block' && element.style.backgroundColor) {
+      const paragraph = element.closest<HTMLElement>('p')
+      if (paragraph) addDefaultStyle(paragraph, { 'text-align': 'center' })
+    }
     if (tag === 'ul' || tag === 'ol') addDefaultStyle(element, { 'font-family': 'Arial, Helvetica, sans-serif', 'font-size': '16px', 'line-height': '1.65', color: '#252525', margin: '0 0 20px', 'padding-left': '22px' })
     if (tag === 'hr') addDefaultStyle(element, { border: '0', 'border-top': '1px solid #dedbd7', margin: '28px 0' })
     if (tag === 'table') addDefaultStyle(element, { 'max-width': '100%', 'border-collapse': 'collapse' })
@@ -46,8 +50,11 @@ export function buildEditorialEmail(content: string, options: EmailLayoutOptions
   const body = styleEditorialContent(content)
   const newsletterName = escapeHtml(options.newsletterName)
   const edition = [options.editionLabel, formatEditionDate(options.editionDate)].filter(Boolean).map(escapeHtml).join(' &nbsp;·&nbsp; ')
-  const masthead = options.buttondownTemplate === 'modern' ? '' : `<tr><td bgcolor="#171717" style="background-color:#171717;padding:28px 30px 24px"><p style="font-family:Georgia,'Times New Roman',serif;font-size:26px;line-height:1.1;color:#ffffff;margin:0 0 15px">${newsletterName}</p><p style="font-family:Arial,Helvetica,sans-serif;font-size:10px;line-height:1.4;letter-spacing:1.5px;text-transform:uppercase;color:#e8dcd7;margin:0">${edition || 'UMA PUBLICAÇÃO EDITORIAL'}</p><div style="height:3px;width:34px;background-color:#c7353d;margin-top:18px;font-size:1px;line-height:1px">&nbsp;</div></td></tr>`
-  const html = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f2f0ed" style="width:100%;border-collapse:collapse;background-color:#f2f0ed;margin:0;padding:0"><tbody><tr><td align="center" style="padding:20px 10px"><table role="presentation" width="640" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="width:100%;max-width:640px;border-collapse:collapse;background-color:#ffffff;margin:0 auto"><tbody>${masthead}<tr><td style="padding:34px 30px 18px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#252525">${body}</td></tr></tbody></table></td></tr></tbody></table>`
+  const masthead = options.buttondownTemplate === 'modern' ? '' : `<tr><td align="left" bgcolor="#171717" style="background-color:#171717;padding:28px 30px 24px;text-align:left"><p style="font-family:Georgia,'Times New Roman',serif;font-size:26px;line-height:1.1;color:#ffffff;margin:0 0 15px">${newsletterName}</p><p style="font-family:Arial,Helvetica,sans-serif;font-size:10px;line-height:1.4;letter-spacing:1.5px;text-transform:uppercase;color:#e8dcd7;margin:0">${edition || 'UMA PUBLICAÇÃO EDITORIAL'}</p><div style="height:3px;width:34px;background-color:#c7353d;margin-top:18px;font-size:1px;line-height:1px">&nbsp;</div></td></tr>`
+  // CSS auto margins are not reliable in email clients. Keep an explicit
+  // legacy table alignment on the frame, while each content cell stays left
+  // aligned so paragraph and heading alignment remains as authored.
+  const html = `<table role="presentation" align="center" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f2f0ed" style="width:100%;border-collapse:collapse;background-color:#f2f0ed;margin:0;padding:0"><tbody><tr><td align="center" style="padding:20px 10px"><table role="presentation" align="center" width="640" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="width:100%;max-width:640px;border-collapse:collapse;background-color:#ffffff;margin:0 auto"><tbody>${masthead}<tr><td align="left" style="padding:34px 30px 18px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#252525;text-align:left">${body}</td></tr></tbody></table></td></tr></tbody></table>`
   if (!isSafeEmailBody(html)) throw new Error('Não foi possível compor um HTML de e-mail seguro.')
   return html
 }
