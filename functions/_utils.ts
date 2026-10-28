@@ -61,7 +61,8 @@ export async function buttondown(context: RequestContext, path: string, init: Re
   headers.set('X-API-Version', apiVersion)
   headers.set('Accept', 'application/json')
   if (!path.startsWith('/') || path.startsWith('//') || path.includes('://')) throw new Error('INVALID_UPSTREAM_PATH')
-  const response = await fetch(`${apiBase}${path}`, { ...init, headers, redirect: 'error', signal: AbortSignal.timeout(15_000) })
+  const response = await fetch(`${apiBase}${path}`, { ...init, headers, redirect: 'manual', signal: AbortSignal.timeout(15_000) })
+  if (response.status >= 300 && response.status < 400) throw new TypeError('Unexpected Buttondown redirect')
   if (!response.ok) {
     const error = new Error(`BUTTONDOWN_${response.status}`)
     Object.assign(error, { status: response.status })

@@ -13,6 +13,15 @@ afterEach(() => vi.unstubAllGlobals())
 const mock = (data: unknown, code = 200) => vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => Response.json(data, { status: code })))
 
 describe('Buttondown com mocks, sem chamadas externas', () => {
+  it('usa redirect manual compatível com Workers e recusa redirecionamento sem reenviar credenciais', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+      expect(init.redirect).toBe('manual')
+      return new Response(null, { status: 302, headers: { Location: 'https://example.com/' } })
+    }))
+    expect(await (await status({ request, env })).json()).toMatchObject({ connected: false })
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
   it('distingue chave configurada, conexão e demonstração', async () => {
     mock({ detail: 'secret response never forwarded' }, 401)
     expect(await (await status({ request, env })).json()).toMatchObject({ configured: true, connected: false, demo: false })
