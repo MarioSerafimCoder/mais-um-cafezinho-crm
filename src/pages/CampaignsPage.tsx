@@ -75,7 +75,7 @@ export function CampaignsPage() {
   const campaigns = normalizeCampaigns(local, cloud, remote)
   const loading = cloudBusy || remoteBusy
   return <>
-    <PageTitle eyebrow="ARQUIVO DE EDIÇÕES" title="Campanhas" description="Suas edições, da primeira ideia à publicação." action={<Link to="/editor/new"><Button>Nova campanha</Button></Link>} />
+    <PageTitle eyebrow="ARQUIVO DE EDIÇÕES" title="Edições" description="Suas edições, da primeira ideia à publicação." action={<Link to="/editor/new"><Button>Nova edição</Button></Link>} />
     <details className="recovery-import"><summary>Recuperar um backup</summary><p>Importe JSON do editor ou de um backup local. Os rascunhos entram como cópias novas, sem substituir edições ou vínculos da Buttondown.</p><input aria-label="Importar cópias de recuperação" type="file" accept="application/json,.json" onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; if (file.size > 5_000_000) { setError('O backup excede o limite de 5 MB.'); return } void file.text().then(async (text) => { const { importRecoveryCopies } = await import('../lib/recovery'); importRecoveryCopies(text); setError(''); setReload((value) => value + 1) }).catch((cause) => setError(cause instanceof Error ? cause.message : 'Falha ao importar backup.')) }} /></details>
 
     {demo && <DemoNotice />}
@@ -83,13 +83,13 @@ export function CampaignsPage() {
     {error && <Button variant="outline" onClick={downloadDraftBackup}>Exportar backup dos rascunhos locais</Button>}
     {loading && <p role="status">Atualizando edições…</p>}
     {!loading && !campaigns.length && <EmptyState title="Ainda não há campanhas." description="Comece uma nova edição para escrever." />}
-    <div className="campaign-list">{campaigns.map(campaign => <article className="campaign-row" key={campaign.id}>
-      <div className="campaign-info"><strong>{campaign.subject}</strong><span>Última atualização: {campaign.updatedAt ? new Date(campaign.updatedAt).toLocaleString('pt-BR') : 'não informada'}</span></div>
+    <div className="campaign-list">{campaigns.map((campaign, index) => <article className={`campaign-row${index === 0 ? ' is-recent' : ''}`} key={campaign.id}>
+      <div className="campaign-info">{campaign.status === 'draft' && !campaign.demo ? <Link className="campaign-primary-link" to={'/editor/' + encodeURIComponent(campaign.editorId!)}><strong>{campaign.subject}</strong></Link> : campaign.absolute_url ? <a className="campaign-primary-link" href={campaign.absolute_url} target="_blank" rel="noreferrer"><strong>{campaign.subject}</strong></a> : <strong>{campaign.subject}</strong>}<span>Última atualização: {campaign.updatedAt ? new Date(campaign.updatedAt).toLocaleString('pt-BR') : 'não informada'}</span></div>
       <StatusPill tone={campaign.status === 'sent' ? 'success' : 'neutral'}>{campaign.editorialState}</StatusPill>
       <div className="campaign-actions">
-        {campaign.status === 'draft' && !campaign.demo && <Link to={'/editor/' + encodeURIComponent(campaign.editorId!)}>{campaign.editorialState === 'Rascunho preparado' ? 'Revisar edição' : 'Continuar edição'}</Link>}
+        {campaign.status === 'draft' && !campaign.demo && <Link to={'/editor/' + encodeURIComponent(campaign.editorId!)}>{campaign.editorialState === 'Preparada para revisão' ? 'Revisar edição' : 'Continuar edição'}</Link>}
         {campaign.status !== 'draft' && campaign.absolute_url && <a href={campaign.absolute_url} target="_blank" rel="noreferrer">Visualizar publicação</a>}
-        {!campaign.demo && <Button size="sm" variant="quiet" onClick={() => void duplicate(campaign)}>Duplicar</Button>}
+        {!campaign.demo && <details className="campaign-more"><summary aria-label={`Mais ações para ${campaign.subject}`}>Mais</summary><Button size="sm" variant="quiet" onClick={() => void duplicate(campaign)}>Duplicar edição</Button></details>}
       </div>
     </article>)}</div>
     {(cursor || hasNext) && <Button variant="outline" disabled={loading} onClick={() => void more()}>Carregar mais edições</Button>}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { Coffee, LayoutDashboard, Mail, PenLine, UsersRound, PanelsTopLeft, Settings2, Menu, X, Sun, Moon, ArrowUpRight } from 'lucide-react'
+import { Coffee, LayoutDashboard, Mail, PenLine, UsersRound, Settings2, Menu, X, Sun, Moon, ArrowUpRight } from 'lucide-react'
 import { api } from '../lib/api'
 import { readSettings, writeSettings } from '../lib/storage'
 import type { IntegrationStatus } from '../types'
@@ -8,10 +8,9 @@ import { StatusPill } from './ui'
 
 const navigation = [
   { to: '/', label: 'Visão geral', icon: LayoutDashboard, end: true },
-  { to: '/campaigns', label: 'Campanhas', icon: Mail },
-  { to: '/editor/new', label: 'Criar newsletter', icon: PenLine },
+  { to: '/campaigns', label: 'Edições', icon: Mail },
+  { to: '/editor/new', label: 'Nova edição', icon: PenLine },
   { to: '/subscribers', label: 'Assinantes', icon: UsersRound },
-  { to: '/templates', label: 'Templates', icon: PanelsTopLeft },
   { to: '/settings', label: 'Configurações', icon: Settings2 },
 ]
 

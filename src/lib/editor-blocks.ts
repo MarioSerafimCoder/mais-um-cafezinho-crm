@@ -31,11 +31,11 @@ export function currentBlock(editor: Editor) {
 }
 
 export function documentBlocks(editor: Editor) {
-  const blocks: Array<{ position: number; label: string }> = []
+  const blocks: Array<{ position: number; label: string; kind: string }> = []
   const labels: Record<string, string> = { paragraph: 'Parágrafo vazio', heading: 'Título', image: 'Imagem', button: 'Botão', divider: 'Divisória', horizontalRule: 'Divisória', blockquote: 'Citação', table: 'Tabela', bulletList: 'Lista', orderedList: 'Lista numerada' }
   editor.state.doc.descendants((node, position) => {
     if (['container', 'body', 'globalContent'].includes(node.type.name)) return true
-    if (node.isBlock) { blocks.push({ position, label: node.textContent.slice(0, 42) || labels[node.type.name] || 'Bloco' }); return false }
+    if (node.isBlock) { blocks.push({ position, label: node.textContent.slice(0, 42) || labels[node.type.name] || 'Bloco', kind: node.type.name }); return false }
     return true
   })
   return blocks

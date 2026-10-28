@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, ArrowUpRight, PenLine, UsersRound, Mail, FileText, CalendarClock } from 'lucide-react'
 import { api, requireConnection } from '../lib/api'
+import { readDrafts } from '../lib/storage'
+import type { DraftRecord } from '../types'
 import { demoDashboard } from '../data/templates'
 import type { DashboardSummary } from '../types'
 import { Button, DemoNotice, ErrorState, LoadingState, PageTitle, StatusPill } from '../components/ui'
@@ -16,33 +18,38 @@ export function DashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [error, setError] = useState('')
   const [reload, setReload] = useState(0)
+  const [latest, setLatest] = useState<DraftRecord | null>(null)
+  const [localError, setLocalError] = useState('')
 
   useEffect(() => {
     let active = true
+    const refreshLocal = () => { try { const drafts = readDrafts(); setLatest([...drafts].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id))[0] || null); setLocalError('') } catch { setLocalError('Não foi possível ler as edições deste navegador.') } }
+    refreshLocal(); window.addEventListener('storage', refreshLocal)
     void api.status().then(requireConnection).then((status) => status.demo ? demoDashboard : api.dashboard())
       .then((data) => { if (active) setSummary(data) })
       .catch((cause: unknown) => { if (active) setError(cause instanceof Error ? cause.message : 'Não foi possível carregar a visão geral.') })
-    return () => { active = false }
+    return () => { active = false; window.removeEventListener('storage', refreshLocal) }
   }, [reload])
 
   const [today] = useState(() => new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date()))
   const retry = () => { setSummary(null); setError(''); setReload((value) => value + 1) }
 
   return <>
-    <PageTitle eyebrow={`HOJE · ${today}`} title="Um bom dia para escrever." description="A casa do Mais um Cafezinho, com os números que realmente existem." action={<Link to="/editor/new"><Button icon={<PenLine size={16} />}>Nova newsletter</Button></Link>} />
+    <PageTitle eyebrow={`HOJE · ${today}`} title="Um bom dia para escrever." description="Seu espaço para criar e acompanhar edições." />
+    <section className="continue-card" aria-label="Continue de onde parou"><p className="eyebrow">CONTINUE DE ONDE PAROU</p>{latest ? <><h2>{latest.subject || 'Sem assunto'}</h2><p>Atualizada em {dateLabel(latest.updatedAt)} · {latest.cloudSavedRevision !== latest.revision || (latest.buttondownId && latest.syncedRevision !== latest.revision) ? 'Sincronização pendente' : 'Salva neste dispositivo'}</p><div className="continue-actions"><Link to={`/editor/${encodeURIComponent(latest.id)}`}><Button icon={<PenLine size={16} />}>Continuar escrevendo</Button></Link><Link to="/editor/new"><Button variant="outline">Nova edição</Button></Link></div></> : <><h2>Sua próxima edição começa aqui.</h2><p>{localError || 'Abra um rascunho e comece a escrever.'}</p><Link to="/editor/new"><Button>Nova edição</Button></Link></>}</section>
     {summary?.demo && <DemoNotice />}
     {error && <ErrorState message={error} onRetry={retry} />}
     {!summary && !error && <LoadingState label="Buscando dados da newsletter…" />}
     {summary && <>
-      <section className="metric-strip" aria-label="Resumo da newsletter">
+      <details className="dashboard-metrics"><summary>Indicadores da Buttondown</summary><p>Totais da plataforma; edições salvas apenas neste navegador aparecem em “Continue de onde parou”.</p><section className="metric-strip" aria-label="Resumo da newsletter">
         <div className="metric-item"><span className="metric-label"><UsersRound size={15} /> ASSINANTES</span><strong>{summary.subscribers?.toLocaleString('pt-BR') ?? '—'}</strong><small>inscrições ativas</small></div>
         <div className="metric-item"><span className="metric-label"><ArrowRight size={15} /> NOVOS</span><strong>{summary.newSubscribers?.toLocaleString('pt-BR') ?? '—'}</strong><small>neste mês</small></div>
         <div className="metric-item"><span className="metric-label"><Mail size={15} /> PUBLICADAS</span><strong>{summary.sentCampaigns?.toLocaleString('pt-BR') ?? '—'}</strong><small>edições enviadas</small></div>
         <div className="metric-item"><span className="metric-label"><FileText size={15} /> RASCUNHOS</span><strong>{summary.drafts?.toLocaleString('pt-BR') ?? '—'}</strong><small>em construção</small></div>
         <div className="metric-item"><span className="metric-label"><CalendarClock size={15} /> AGENDADAS</span><strong>{summary.scheduled?.toLocaleString('pt-BR') ?? '—'}</strong><small>próximos envios</small></div>
-      </section>
+      </section></details>
       <section className="dashboard-lower">
-        <div className="section-heading"><div><p className="eyebrow">CADERNO DE BORDO</p><h2>Movimentações recentes</h2></div><Link className="subtle-link" to="/campaigns">Ver campanhas <ArrowUpRight size={14} /></Link></div>
+        <div className="section-heading"><div><p className="eyebrow">CADERNO DE BORDO</p><h2>Movimentações recentes</h2></div><Link className="subtle-link" to="/campaigns">Ver edições <ArrowUpRight size={14} /></Link></div>
         {summary.recent.length ? <div className="activity-list">
           {summary.recent.slice(0, 5).map((campaign) => <article className="activity-row" key={campaign.id}>
             <div className="activity-date">{dateLabel(campaign.publish_date || campaign.creation_date)}</div>

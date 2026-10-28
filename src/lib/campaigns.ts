@@ -23,7 +23,7 @@ export function normalizeCampaigns(local: DraftRecord[], cloud: DraftSummary[], 
     const pending = latest && (Boolean(latest.buttondownId && latest.syncedRevision !== (latest.revision || 0)) || Boolean(localDraft && localDraft.cloudRevision && localDraft.cloudSavedRevision !== (localDraft.revision || 0)))
     const editorialState = status === 'sent' ? 'Enviada' : ['scheduled', 'about_to_send', 'in_flight'].includes(status) ? 'Agendada'
       : status !== 'draft' ? 'Estado não confirmado'
-      : latest ? pending && (latest.buttondownId || latest.cloudRevision) ? 'Sincronização pendente' : latest.buttondownId && latest.syncedRevision === (latest.revision || 0) ? 'Rascunho preparado' : 'Em edição'
+      : latest ? pending && (latest.buttondownId || latest.cloudRevision) ? 'Sincronização pendente' : latest.buttondownId && latest.syncedRevision === (latest.revision || 0) ? 'Preparada para revisão' : 'Em edição'
       : 'Rascunho na plataforma'
     return { ...g.remote, id: key, subject: latest?.subject || g.remote?.subject || 'Sem assunto', status,
       editorId: latest?.id || g.remote?.id, updatedAt: latest?.updatedAt || g.remote?.modification_date || g.remote?.publish_date || g.remote?.creation_date || '',

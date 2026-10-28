@@ -66,6 +66,8 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
   const [replacement, setReplacement] = useState<NewsletterTemplateId | null>(null)
   const [remoteCopy, setRemoteCopy] = useState<DraftRecord | null>(null)
   const [showHtml, setShowHtml] = useState(false)
+  const [toolsOpen, setToolsOpen] = useState(true)
+  const deliveryTools = useRef<HTMLDetailsElement | null>(null)
   const blocker = useBlocker(() => Boolean(sessionRef.current?.dirty || captureError.current))
   const cancelPending = useCallback(() => { previewRequest.current++; if (timer.current) clearTimeout(timer.current) }, [])
 
@@ -252,7 +254,7 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
   if (!session || !initial) return <LoadingState label="Abrindo o caderno…" />
   const draft = session.value
   const selected = editor ? currentBlock(editor) : null
-  const outline = editor ? documentBlocks(editor) : []
+  const outline = editor ? documentBlocks(editor).filter(block => block.kind === 'heading').slice(0, 12) : []
   const saveLabel = coordinator?.label || (session.state === 'erro' ? 'Não foi possível salvar — intervenção necessária.' : 'Salvando…')
   const busy = session.syncing || session.cloudSaving || Boolean(coordinator?.busy)
 
@@ -263,15 +265,27 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
     if (kind === 'button') editor.chain().focus().setButton().run()
     else editor.chain().focus().insertContent(({ paragraph: '<p>Escreva por aqui.</p>', heading: '<h2>Uma nova ideia</h2>', quote: '<blockquote><p>Uma frase que pede uma pausa.</p></blockquote>', divider: '<hr />' } as Record<string, string>)[kind]).run()
   }
+  const openDelivery = (kind: 'test' | 'campaign') => {
+    setToolsOpen(true)
+    requestAnimationFrame(() => {
+      const panel = deliveryTools.current
+      if (!panel) return
+      panel.open = true
+      const target = kind === 'campaign' ? panel.querySelector<HTMLDetailsElement>('.campaign-delivery') : panel.querySelector<HTMLElement>('.test-delivery')
+      if (target instanceof HTMLDetailsElement) target.open = true
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      (target?.querySelector('summary, button') as HTMLElement | null)?.focus()
+    })
+  }
 
   return <div className="editor-page">
-    <div className="editor-topline"><Link className="back-link" to="/campaigns"><ArrowLeft size={15} /> Campanhas</Link><span className="editor-save-state" data-state={session.state} role="status">{saveLabel}</span></div>
-    <div className="editor-heading"><div><p className="eyebrow">CADERNO DE EDIÇÃO</p><input className="subject-input" value={draft.subject} onChange={(event) => { session.edit({ subject: event.target.value }); schedule() }} aria-label="Assunto da newsletter" /></div><div className="editor-heading-actions"><Button className="editor-save-sync-button" icon={<span className="editor-save-sync-icon"><Save size={15} /><UploadCloud size={14} /></span>} onClick={() => void sync()} disabled={busy || !integration?.connected}>{busy ? 'Salvando…' : 'Preparar edição'}</Button></div></div>
+    <div className="editor-topline"><Link className="back-link" to="/campaigns"><ArrowLeft size={15} /> Edições</Link><span className="editor-save-state" data-state={session.state} role="status">{saveLabel}</span><button className="inspector-toggle" type="button" aria-expanded={toolsOpen} aria-controls="editor-inspector" onClick={() => setToolsOpen(value => !value)}>{toolsOpen ? 'Recolher ferramentas' : 'Mostrar ferramentas'}</button></div>
+    <div className="editor-heading"><div className="editor-heading-copy"><p className="eyebrow">CADERNO DE EDIÇÃO</p><textarea className="subject-input" rows={1} value={draft.subject} onInput={(event) => { const field = event.currentTarget; field.style.height = 'auto'; field.style.height = `${field.scrollHeight}px` }} onChange={(event) => { session.edit({ subject: event.target.value }); schedule() }} aria-label="Assunto da newsletter" /></div><div className="editor-heading-actions"><Button className="editor-save-sync-button" icon={<span className="editor-save-sync-icon"><Save size={15} /><UploadCloud size={14} /></span>} onClick={() => void sync()} disabled={busy || !integration?.connected}>{busy ? 'Salvando…' : 'Preparar edição'}</Button><Button variant="outline" onClick={() => openDelivery('test')}>Enviar teste</Button><Button variant="outline" onClick={() => openDelivery('campaign')}>Enviar campanha</Button></div></div>
     {(!integration?.connected || !integration.cloud) && <p className="editor-demo-note">{!integration?.connected ? integration?.demo ? 'Demonstração identificada. A sincronização com Buttondown e D1 não está disponível.' : integration?.reason || 'Sem conexão confirmada com a Buttondown. O conteúdo continua salvo neste navegador.' : 'A recuperação entre dispositivos está indisponível. O conteúdo será salvo neste dispositivo.'}</p>}
     {(error || session.error || coordinator?.error) && <div className="editor-inline-error" role="alert">{error || session.error || coordinator?.error}<button onClick={() => { setError(''); session.clearError() }} aria-label="Fechar aviso">×</button></div>}
     {notice && <div className="editor-inline-success" role="status">{notice}</div>}
     {remoteCopy && <div className="editor-demo-note"><span>Há uma versão mais recente na nuvem. Sua cópia local está preservada.</span><Button size="sm" onClick={() => run(() => { downloadRecord(session.value); const remote = { ...remoteCopy, revision: Math.max(draft.revision || 0, remoteCopy.revision || 0) + 1 }; writeDraft(remote, readDrafts().find((item) => item.id === remote.id) || null); install(remote); setRemoteCopy(null) })}>Exportar esta cópia e abrir a versão da nuvem</Button></div>}
-    <div className="editor-workbench">
+    <div className={`editor-workbench${toolsOpen ? '' : ' tools-closed'}`}>
       <section className="editor-center">
         <div className="editor-toolbar"><label className="insert-menu">Inserir bloco <select aria-label="Inserir bloco" value="" disabled={preview} onChange={(event) => insert(event.target.value)}><option value="">Escolher…</option><optgroup label="Texto"><option value="paragraph">Parágrafo</option><option value="heading">Título de seção</option><option value="quote">Citação</option></optgroup><optgroup label="Mídia e links"><option value="image">Imagem</option><option value="button">Botão</option></optgroup><optgroup label="Estrutura"><option value="divider">Divisória</option></optgroup></select></label><div className="toolbar-history toolbar-group"><button className="icon-button" aria-label="Desfazer" disabled={preview} onClick={() => editor?.chain().focus().undo().run()}><Undo2 size={16} /></button><button className="icon-button" aria-label="Refazer" disabled={preview} onClick={() => editor?.chain().focus().redo().run()}><Redo2 size={16} /></button></div></div>
         <div className={`editor-canvas${preview ? ' is-preview' : ''}`}><div className="canvas-ruler"><span>{preview ? 'PRÉVIA DO HTML EXPORTADO' : 'EDIÇÃO EM CURSO'}</span><div className="canvas-view-actions"><button className={!preview ? 'selected' : ''} onClick={() => { previewRequest.current++; setPreviewBusy(false); setPreview(false); requestAnimationFrame(() => { if (editor && previewSelection.current) editor.chain().focus().setTextSelection(previewSelection.current).run(); else editor?.commands.focus() }) }}>Escrever</button><button className={preview ? 'selected' : ''} onClick={() => void openPreview()} disabled={previewBusy}>{previewBusy ? 'Gerando…' : 'Prévia'}</button></div></div>
@@ -280,7 +294,7 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
         </div>
         <div className="editor-canvas-footer"><span>Documento editável em JSON · HTML gerado para prévia e Buttondown</span><button className="html-toggle" onClick={() => run(async () => { setHtml(await exportHtml()); setShowHtml((value) => !value) })}>{showHtml ? 'Fechar HTML' : 'Ver HTML'}</button></div>{showHtml && <pre className="html-output">{html}</pre>}
       </section>
-      <aside className="editor-inspector"><div className="inspector-title"><div><p className="eyebrow">FERRAMENTAS</p><h2>Composição</h2></div></div>
+      <aside id="editor-inspector" className="editor-inspector" hidden={!toolsOpen}><div className="inspector-title"><div><p className="eyebrow">FERRAMENTAS</p><h2>Composição</h2></div></div>
         <details className="inspector-section"><summary>Templates</summary><Field label="Ponto de partida"><select value={draft.templateId || ''} disabled={preview || busy} onChange={(event) => setReplacement(event.target.value as NewsletterTemplateId)}><option value="" disabled>Importado / sem template</option>{templates.map((item) => <option value={item.id} key={item.id}>{item.number} · {item.name}</option>)}</select></Field><span className="inspector-hint">A troca pede confirmação e pode ser desfeita.</span></details>
         <details className="inspector-section"><summary>Configurações da edição</summary>
           <Field label="Texto de prévia (preheader)"><input maxLength={200} value={draft.description || ''} disabled={preview || busy} onChange={(event) => { session.edit({ description: event.target.value }); schedule() }} /></Field>
@@ -292,13 +306,12 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
           {editor && <ol className="block-outline" aria-label="Estrutura da edição">{outline.map((block, index) => <li key={block.position}><button disabled={preview} aria-current={selected?.position === block.position ? 'true' : undefined} onClick={() => editor.chain().focus().setTextSelection(Math.min(block.position + 1, editor.state.doc.content.size)).scrollIntoView().run()}>{index + 1}. {block.label}</button></li>)}</ol>}
         </section>
         {editor && <MediaControls editor={editor} connected={Boolean(integration?.connected)} disabled={preview || busy} upload={uploadImage} onError={setError} />}
-        <details className="inspector-section"><summary>Ferramentas de envio e homologação</summary><CampaignDelivery key={`campaign:${draft.id}:${draft.revision}:${draft.cloudRevision}`} draft={draft} />
+        <details className="inspector-section" ref={deliveryTools}><summary>Ferramentas de envio e homologação</summary><CampaignDelivery key={`campaign:${draft.id}:${draft.revision}:${draft.cloudRevision}`} draft={draft} />
         <DeliveryPreparation key={`test:${draft.id}:${draft.revision}:${draft.cloudRevision}`} draft={draft} /></details>
         <details className="inspector-section"><summary>Exportação e recuperação</summary><Button size="sm" variant="outline" disabled={!integration?.cloud || busy} onClick={() => run(async () => { setRemoteCopy(await api.cloudDraft(draft.id)) })}>Conferir versão recuperável</Button><Button size="sm" variant="outline" onClick={() => downloadRecord({ ...session.value, document: ref.current?.getJSON() || session.value.document })}>Exportar documento</Button><Button size="sm" variant="outline" disabled={busy} onClick={() => run(async () => { await persistence.current?.reconnect(); await persistence.current?.flush(true) })}>Tentar preparar novamente</Button><span className="inspector-hint">{integration?.cloud ? `Última cópia na nuvem: ${dateLabel(draft.lastCloudSavedAt)}${draft.lastCloudSavedAt && draft.cloudSavedRevision !== draft.revision ? ' · há alterações posteriores' : ''}` : 'Recuperação entre dispositivos exige o banco editorial configurado. A cópia deste navegador continua disponível.'}</span></details>
         <p className="inspector-hint">Envios reais exigem ativação explícita no servidor e permissão de envio na Buttondown. A configuração atual permanece fechada por padrão.</p>
       </aside>
     </div>
-    <div className="editor-bottom-bar"><span className="safe-footer-copy">Preparar uma edição salva um rascunho para revisão. Nenhum e-mail é enviado automaticamente.</span></div>
     {replacement && <div className="editor-dialog-backdrop"><section role="dialog" aria-modal="true" aria-label="Trocar template" className="editor-dialog"><h2>Trocar o ponto de partida?</h2><p>O conteúdo, assunto e texto de prévia serão substituídos. Desfazer recupera o conteúdo; o backup exportado também conserva o assunto anterior.</p><Button variant="outline" onClick={() => setReplacement(null)}>Cancelar</Button><Button onClick={() => run(() => { if (!editor) return; downloadRecord(session.value); const template = getTemplate(replacement, readSettings()); replaceTemplate(editor, template.content); session.edit({ subject: template.subject, description: template.preheader, buttondownTemplate: template.buttondownTemplate, templateId: template.id }); capture(ref.current!); schedule(); setReplacement(null) })}>Substituir conteúdo e assunto</Button></section></div>}
     {blocker.state === 'blocked' && <div className="editor-dialog-backdrop"><section role="dialog" aria-modal="true" aria-label="Alterações não salvas" className="editor-dialog"><h2>Ainda há alterações sem salvar.</h2><p>Salve neste navegador ou continue a edição antes de sair.</p><Button variant="outline" onClick={() => blocker.reset()}>Continuar editando</Button><Button onClick={() => run(() => { saveLocal(); blocker.proceed() })}>Salvar e sair</Button><Button variant="quiet" onClick={() => blocker.proceed()}>Sair sem salvar</Button></section></div>}
   </div>

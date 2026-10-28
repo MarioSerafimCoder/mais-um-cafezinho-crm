@@ -87,7 +87,7 @@ test('falha de armazenamento avisa ao navegar e não informa sucesso', async ({ 
   await body.fill('Este texto ainda não está persistido')
   await page.getByRole('button', { name: 'Prévia', exact: true }).click()
   await expect(page.getByRole('alert')).toBeVisible()
-  await page.getByRole('link', { name: 'Campanhas', exact: true }).last().click()
+  await page.getByRole('link', { name: 'Edições', exact: true }).last().click()
   await expect(page.getByRole('dialog', { name: 'Alterações não salvas' })).toBeVisible()
   await page.getByRole('button', { name: 'Continuar editando' }).click()
   await expect(body).toContainText('Este texto ainda não está persistido')
