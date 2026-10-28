@@ -1,4 +1,4 @@
-import type { ApiPage, Campaign, DashboardSummary, DraftRecord, IntegrationStatus, NewsletterSettings, Subscriber } from '../types'
+import type { ApiPage, Campaign, CampaignDeliveryStatus, DashboardSummary, DraftRecord, IntegrationStatus, NewsletterSettings, PreparedCampaignDelivery, Subscriber } from '../types'
 
 export class ApiError extends Error {
   readonly status: number
@@ -31,11 +31,14 @@ export const api = {
   saveCloudDraft: (draft: DraftRecord) => request<DraftRecord>(`/api/drafts/${encodeURIComponent(draft.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draft) }),
   cloudSettings: () => request<NewsletterSettings & { cloudRevision: number }>('/api/settings'),
   saveCloudSettings: (settings: NewsletterSettings & { cloudRevision?: number }) => request<NewsletterSettings & { cloudRevision: number }>('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) }),
-  subscribers: (page: number, search: string) => {
+  subscribers: (page: number, search: string, type?: 'regular' | 'premium') => {
     const params = new URLSearchParams({ page: String(page) })
     if (search.trim()) params.set('email_address', search.trim())
+    if (type) params.set('type', type)
     return request<ApiPage<Subscriber>>(`/api/subscribers?${params}`)
   },
+  campaignDeliveryStatus: () => request<CampaignDeliveryStatus>('/api/campaign-delivery'),
+  campaignDelivery: (payload: Record<string, unknown>) => request<Partial<PreparedCampaignDelivery> & { accepted?: boolean; cancelled?: boolean; error?: string }>('/api/campaign-delivery', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
   campaigns: (page = 1) => request<ApiPage<Campaign>>(`/api/emails?page=${page}`),
   campaign: (id: string) => request<Campaign>(`/api/emails/${encodeURIComponent(id)}`),
   saveDraft: (payload: { id?: string; subject: string; body: string; description?: string; buttondownTemplate?: 'classic' | 'modern'; createKey?: string }) => request<Campaign>(payload.id ? `/api/emails/${encodeURIComponent(payload.id)}` : '/api/emails', {

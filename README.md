@@ -10,7 +10,7 @@ Um painel editorial em português para organizar assinantes, preparar campanhas 
 - Busca e paginação de assinantes, leitura de campanhas da Buttondown e edição de rascunhos.
 - Três templates editáveis, editor visual com prévia desktop/mobile e upload de imagens.
 - Salvamento local automático e sincronização de rascunhos com a Buttondown.
-- As ações de envio e publicação estão desativadas. A API da aplicação não chama o endpoint de envio.
+- O editor inclui um fluxo de envio para contatos ativos selecionados ou todos os ativos, com prévia, contagem e confirmação em duas etapas. O endpoint continua fechado por padrão; a produção não foi habilitada.
 - Cloudflare Access protege as Pages Functions. A chave da Buttondown permanece no servidor.
 
 ## Tecnologias
@@ -73,7 +73,7 @@ O middleware bloqueia os aliases `pages.dev` e previews. Sem configuração vál
 - `.env.example` e `.dev.vars.example` são modelos sem credenciais.
 - A configuração da integração indica que a chave existe; a conexão é confirmada pela resposta da API ao carregar dados.
 - O editor visual é carregado sob demanda e aumenta o tamanho desse chunk (React Email Editor e Prism). As telas de painel não carregam esse editor até abrir a rota.
-- Envio/publicação de newsletters e monitoramento de entregabilidade ficam fora deste MVP.
+- O envio de campanhas exige a migração `0003_campaign_send_attempts.sql`, autorização explícita por `CAMPAIGN_SENDING_ENABLED` e uma chave Buttondown com permissão de envio. A configuração atual conserva `sending_access: none`; veja [o fluxo de envio](docs/ENVIO-DE-CAMPANHAS.md). O CRM não comprova entrega ou recebimento na caixa postal.
 - Rascunhos locais pertencem ao navegador e à origem em que foram criados. Publicar em outro domínio não transfere o `localStorage`; os originais continuam no endereço local. Rascunhos sincronizados continuam na Buttondown.
 
 ## Estrutura

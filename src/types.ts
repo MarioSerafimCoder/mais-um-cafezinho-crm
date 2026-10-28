@@ -18,6 +18,7 @@ export type DraftRecord = {
   lastCloudSavedAt?: string
   lastSyncedAt?: string
   syncedRevision?: number
+  syncedBodyHash?: string
   createKey?: string
   cloudSavedRevision?: number
   pendingCreate?: { key: string; subject: string; body: string; description?: string; template?: 'classic' | 'modern'; revision: number }
@@ -30,6 +31,23 @@ export type Subscriber = {
   source?: string | null
   creation_date?: string | null
   metadata?: Record<string, unknown>
+}
+
+export type CampaignDeliveryStatus = {
+  enabled: boolean
+  reason?: string
+  activeCount?: number
+  selectedLimit?: number
+}
+
+export type PreparedCampaignDelivery = {
+  attemptId: string
+  audienceMode: 'all_active' | 'selected'
+  recipientCount: number
+  cloudRevision: number
+  subject: string
+  expiresAt: string
+  selectedRecipients?: Array<{ id: string; email_address: string }>
 }
 
 export type Campaign = {

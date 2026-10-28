@@ -12,6 +12,7 @@ export type AppEnv = {
   ENVIRONMENT?: string
   EDITORIAL_TEST_ENABLED?: string
   EDITORIAL_TEST_RECIPIENTS?: string
+  CAMPAIGN_SENDING_ENABLED?: string
 }
 
 type RequestContext = {

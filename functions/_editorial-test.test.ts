@@ -1,8 +1,10 @@
+/// <reference types="node" />
 // @vitest-environment node
 import { afterEach, expect, it, vi } from 'vitest'
 import { onRequestPost } from './api/editorial-test'
 import type { AppEnv } from './_utils'
-const draft = { id: 'local-test', document: { type: 'doc' }, subject: 'HOMOLOGAÇÃO NÃO ENVIAR', buttondownId: 'em_test', revision: 2, syncedRevision: 2, cloudSavedRevision: 2 }
+import { createHash } from 'node:crypto'
+const draft = { id: 'local-test', document: { type: 'doc' }, subject: 'HOMOLOGAÇÃO NÃO ENVIAR', buttondownId: 'em_test', revision: 2, syncedRevision: 2, cloudSavedRevision: 2, syncedBodyHash: createHash('sha256').update('<p>Teste</p>').digest('hex') }
 function setup(overrides = {}) {
   let claimed = false
   const row = { draft_id: draft.id, cloud_revision: 4, recipient: 'owner@example.com', campaign_id: 'em_test', body: '<p>Teste</p>', subject: draft.subject, created_at: new Date().toISOString() }
@@ -12,7 +14,8 @@ function setup(overrides = {}) {
   return (body: object) => onRequestPost({ env, request: new Request('https://example.com/api/editorial-test', { method: 'POST', body: JSON.stringify({ draftId: draft.id, cloudRevision: 4, ...body }) }) })
 }
 afterEach(() => vi.unstubAllGlobals())
-it('desativado por padrão, sem chamadas externas', async () => { const run = setup({ EDITORIAL_TEST_ENABLED: undefined }); expect((await run({})).status).toBe(403); expect(fetch).not.toHaveBeenCalled() })
+it('respeita desativação explícita sem chamadas externas', async () => { const run = setup({ EDITORIAL_TEST_ENABLED: 'false' }); expect((await run({})).status).toBe(403); expect(fetch).not.toHaveBeenCalled() })
+it('allowlist e chave configuradas dispensam flag por teste', async () => { const run = setup({ EDITORIAL_TEST_ENABLED: undefined }); expect((await run({ recipientIndex: 0 })).status).toBe(200) })
 it('recusa destinatário arbitrário e revisão antiga', async () => { const run = setup(); expect((await run({ recipients: ['x@example.com'] })).status).toBe(400); expect((await run({ cloudRevision: 3 })).status).toBe(409); expect(fetch).not.toHaveBeenCalled() })
 it('prepara destino exato sem enviar', async () => { const run = setup(); const response = await run({ recipientIndex: 0 }); expect(await response.json()).toMatchObject({ recipient: 'owner@example.com', cloudRevision: 4 }); expect(fetch).toHaveBeenCalledTimes(1); expect(vi.mocked(fetch).mock.calls[0][0]).not.toContain('send-draft') })
 it('exige confirmação e impede repetição; usa somente send-draft', async () => {

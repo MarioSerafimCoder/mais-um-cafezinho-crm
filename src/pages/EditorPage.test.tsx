@@ -5,7 +5,7 @@ import { EditorPage } from './EditorPage'
 import { readDrafts } from '../lib/storage'
 
 const mocks = vi.hoisted(() => ({ configured: false, save: vi.fn() }))
-vi.mock('../lib/api', () => ({ api: { status: async () => ({ configured: mocks.configured, connected: mocks.configured, demo: !mocks.configured }), saveDraft: mocks.save } }))
+vi.mock('../lib/api', () => ({ api: { status: async () => ({ configured: mocks.configured, connected: mocks.configured, demo: !mocks.configured }), campaignDeliveryStatus: async () => ({ enabled: false }), saveDraft: mocks.save } }))
 vi.mock('@react-email/editor/extensions', () => ({ StarterKit: { configure: () => ({}) } }))
 vi.mock('@react-email/editor/plugins', () => ({ EmailTheming: { configure: () => ({}) }, useEditorImage: () => ({}) }))
 vi.mock('@react-email/editor', async () => {

@@ -1,0 +1,28 @@
+# Envio de campanhas pelo CRM
+
+## Estado desta implementação
+
+O editor permite escolher contatos ativos específicos ou todos os assinantes ativos. A interface prepara uma prévia que mostra o assunto, a revisão D1, a contagem e os endereços selecionados. O envio exige uma confirmação final explícita.
+
+O recurso está fechado por padrão no servidor (`CAMPAIGN_SENDING_ENABLED` ausente ou diferente de `true`). Esta alteração de código não aplicou migração, não alterou secrets ou permissões da Buttondown, não publicou o CRM e não enviou e-mails. A configuração de produção continua conforme o guia operacional, com permissão de envio desativada.
+
+## Regras do fluxo
+
+- “Todos” considera assinantes `regular` e `premium`. A campanha precisa estar em draft e sem filtros de audiência; o servidor consulta a contagem antes de preparar e novamente antes de confirmar.
+- A seleção individual inclui apenas assinantes `regular` ou `premium`, permite até 500 contatos e valida IDs, status e endereços no servidor. O e-mail confirmado é o mesmo endereço validado antes do envio.
+- O servidor exige a revisão atual salva no D1 e sincronizada, consulta a campanha remota e compara assunto, hash do corpo enviado, template, descrição e audiência antes de aceitar a confirmação. Rascunhos antigos sem hash registrado precisam ser sincronizados novamente antes do primeiro envio.
+- A confirmação para contatos selecionados usa `POST /emails/{id}/send-draft` com IDs Buttondown. “Todos” usa `POST /emails/{id}/publish`, que publica e envia imediatamente a campanha conforme a audiência sem filtros da Buttondown.
+- Uma tentativa fica registrada no D1 antes da chamada externa. Cada campanha remota admite uma única preparação/envio ativo ou aceito, mesmo se o rascunho for revisado depois. Resultado incerto permanece bloqueado; não há retry automático. Preparações podem ser canceladas ou expiram após dez minutos. Respostas HTTP 4xx conclusivas, exceto conflito 409, são registradas como rejeitadas e não são tratadas como aceitação.
+- “Aceito pela Buttondown” não significa entregue nem recebido. O CRM apresenta apenas a aceitação da solicitação; confirmação de recebimento exige observar a mensagem na caixa postal.
+
+## Pré-requisitos para ativação futura
+
+1. Revisar e integrar a implementação.
+2. Aplicar a migração `0003_campaign_send_attempts.sql` ao D1 editorial correto.
+3. Obter autorização separada para a permissão de envio na Buttondown; o projeto está configurado/documentado com `sending_access: none` e esta implementação não modifica essa permissão.
+4. Somente após a decisão do proprietário, configurar `CAMPAIGN_SENDING_ENABLED=true` na produção.
+5. Verificar a contagem, audiência, tentativa e estado da Buttondown sem enviar uma campanha real durante a validação.
+
+## Contrato externo
+
+A Buttondown documenta `send-draft` com arrays de IDs de assinantes ou endereços, e `publish` como operação que publica e envia imediatamente quando não recebe `publish_date`. As permissões de chave são independentes; `sending_access` controla o envio e uma chamada sem permissão retorna 403. Fontes oficiais: [send draft](https://docs.buttondown.com/api-emails-send-draft), [publish email](https://docs.buttondown.com/api-emails-publish), [autenticação e permissões](https://docs.buttondown.com/api-authentication).

@@ -7,6 +7,11 @@ import { readDrafts, writeDraft } from './storage'
 export type SaveState = 'alterado' | 'salvando' | 'salvo' | 'erro'
 type SyncPayload = { id?: string; subject: string; body: string; description?: string; buttondownTemplate?: 'classic' | 'modern'; createKey?: string }
 
+async function bodyHash(body: string) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body))
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
 /** The structured snapshot is saved synchronously; network replies only merge metadata. */
 export class DraftSession {
   value: DraftRecord
@@ -79,7 +84,8 @@ export class DraftSession {
       }
       const response = await send({ id: snapshot.buttondownId, subject: pending.subject, body: pending.body, description: pending.description, buttondownTemplate: pending.template, createKey: pending.key })
       if (!response.id) throw new Error('A Buttondown não retornou o identificador do rascunho.')
-      this.value = { ...this.value, buttondownId: response.id, lastSyncedAt: new Date().toISOString(), syncedRevision: pending.revision, pendingCreate: undefined }
+      const syncedBodyHash = await bodyHash(typeof response.body === 'string' ? response.body : pending.body)
+      this.value = { ...this.value, buttondownId: response.id, lastSyncedAt: new Date().toISOString(), syncedRevision: pending.revision, syncedBodyHash, pendingCreate: undefined }
       this.save()
       return response
     } finally { this.syncing = false; this.emit() }

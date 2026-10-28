@@ -6,3 +6,7 @@ CF_ACCESS_AUD=
 LOCAL_ACCESS_BYPASS=true
 ENVIRONMENT=development
 DEMO_MODE=true
+CAMPAIGN_SENDING_ENABLED=false
+EDITORIAL_TEST_RECIPIENTS=
+# Optional emergency stop. With a key and allowlist, tests need no per-send flag.
+# EDITORIAL_TEST_ENABLED=false

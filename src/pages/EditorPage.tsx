@@ -10,6 +10,7 @@ import { getTemplate, templates } from '../data/templates'
 import { extractEmailBody, compatibleEmailBody } from '../lib/email'
 import { buildEditorialEmail } from '../lib/email-layout'
 import { contentQuality } from '../lib/content-quality'
+import { CampaignDelivery } from '../components/CampaignDelivery'
 import { DeliveryPreparation } from '../components/DeliveryPreparation'
 import { downloadDraftBackup, readDrafts, readSettings, writeDraft } from '../lib/storage'
 import { DraftSession } from '../lib/draft-session'
@@ -265,9 +266,10 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
           {editor && <ol className="block-outline" aria-label="Estrutura da edição">{outline.map((block, index) => <li key={block.position}><button disabled={preview} aria-current={selected?.position === block.position ? 'true' : undefined} onClick={() => editor.chain().focus().setTextSelection(Math.min(block.position + 1, editor.state.doc.content.size)).scrollIntoView().run()}>{index + 1}. {block.label}</button></li>)}</ol>}
         </section>
         {editor && <MediaControls editor={editor} connected={Boolean(integration?.connected)} disabled={preview || busy} upload={uploadImage} onError={setError} />}
-        <DeliveryPreparation key={`${draft.id}:${draft.revision}:${draft.cloudRevision}`} draft={draft} />
+        <CampaignDelivery key={`campaign:${draft.id}:${draft.revision}:${draft.cloudRevision}`} draft={draft} />
+        <DeliveryPreparation key={`test:${draft.id}:${draft.revision}:${draft.cloudRevision}`} draft={draft} />
         <section className="inspector-section"><span className="inspector-label">RECUPERAÇÃO</span><Button size="sm" variant="outline" onClick={() => downloadRecord({ ...session.value, document: ref.current?.getJSON() || session.value.document })}>Exportar documento</Button><Button size="sm" variant="outline" disabled={!integration?.cloud || busy} onClick={() => run(async () => { saveLocal(); await session.saveCloud(api.saveCloudDraft); setNotice('Cópia do documento salva na nuvem.') })}>Salvar cópia na nuvem</Button><span className="inspector-hint">{integration?.cloud ? `Última cópia na nuvem: ${dateLabel(draft.lastCloudSavedAt)}${draft.lastCloudSavedAt && draft.cloudSavedRevision !== draft.revision ? ' · há alterações posteriores' : ''}` : 'Recuperação entre dispositivos exige o banco editorial configurado. A cópia deste navegador continua disponível.'}</span></section>
-        <p className="inspector-hint">Este estúdio prepara rascunhos. Envio e publicação continuam indisponíveis.</p>
+        <p className="inspector-hint">Envios reais exigem ativação explícita no servidor e permissão de envio na Buttondown. A configuração atual permanece fechada por padrão.</p>
       </aside>
     </div>
     <div className="editor-bottom-bar"><StatusPill tone={integration?.connected ? 'success' : 'warning'}>{session.syncing ? 'SINCRONIZANDO' : integration?.connected ? 'BUTTONDOWN CONECTADA' : 'SALVAMENTO LOCAL'}</StatusPill><span className="safe-footer-copy">{session.dirty ? 'Há alterações ainda não persistidas.' : 'Cópia local preservada.'}</span></div>

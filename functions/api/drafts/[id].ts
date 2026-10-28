@@ -22,8 +22,10 @@ export const onRequestPut = async ({ request, env, params }: Context) => {
     const version = body.cloudRevision ?? 0
     if (!Number.isInteger(version) || Number(version) < 0) return json({ error: 'Versão inválida.' }, 400)
     // Store editorial documents only. No subscribers or credentials belong in D1.
-    const allowed = ['id', 'subject', 'description', 'buttondownTemplate', 'editionDate', 'content', 'document', 'schemaVersion', 'templateId', 'buttondownId', 'status', 'updatedAt', 'revision', 'lastSyncedAt', 'syncedRevision', 'createKey', 'pendingCreate']
+    if (body.syncedBodyHash !== undefined && (typeof body.syncedBodyHash !== 'string' || !/^[a-f0-9]{64}$/.test(body.syncedBodyHash))) return json({ error: 'Hash de sincronização inválido.' }, 400)
+    const allowed = ['id', 'subject', 'description', 'buttondownTemplate', 'editionDate', 'content', 'document', 'schemaVersion', 'templateId', 'buttondownId', 'status', 'updatedAt', 'revision', 'lastSyncedAt', 'syncedRevision', 'syncedBodyHash', 'createKey', 'pendingCreate']
     const payload = Object.fromEntries(allowed.filter((key) => key in body).map((key) => [key, body[key]]))
+    payload.cloudSavedRevision = Number.isSafeInteger(body.revision) ? body.revision : 0
     return json(await putDocument(env, 'draft', params.id, payload, Number(version)))
   } catch (error) { return errorResponse(error) }
 }
