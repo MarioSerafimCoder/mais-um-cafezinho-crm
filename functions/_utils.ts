@@ -102,11 +102,17 @@ export function pageResult(value: unknown) {
 
 export function validId(value: string) { return /^[a-zA-Z0-9_-]{1,80}$/.test(value) }
 
-export function draftPayload(value: unknown): { subject: string; body: string; status: 'draft' } | null {
+export function draftPayload(value: unknown): { subject: string; body: string; status: 'draft'; description?: string; template?: 'classic' | 'modern' } | null {
   if (!value || typeof value !== 'object') return null
   const data = value as Record<string, unknown>
   if (typeof data.subject !== 'string' || !data.subject.trim() || data.subject.length > 200 || typeof data.body !== 'string' || byteLength(data.body) > 200_000 || data.status !== 'draft') return null
-  return { subject: data.subject.trim(), body: data.body, status: 'draft' }
+  if (data.description !== undefined && (typeof data.description !== 'string' || data.description.length > 200 || /<[^>]*>/.test(data.description))) return null
+  if (data.template !== undefined && data.template !== 'classic' && data.template !== 'modern') return null
+  return {
+    subject: data.subject.trim(), body: data.body, status: 'draft',
+    ...(typeof data.description === 'string' ? { description: data.description.trim() } : {}),
+    ...(data.template === 'classic' || data.template === 'modern' ? { template: data.template } : {}),
+  }
 }
 
 export function safePage(value: string | null) {

@@ -18,7 +18,7 @@ export function readDrafts(): DraftRecord[] {
   try {
     const raw = localStorage.getItem(draftsKey)
     const parsed = raw ? JSON.parse(raw) : []
-    if (!Array.isArray(parsed) || parsed.some((item) => !item || typeof item.id !== 'string' || typeof item.content !== 'string' || typeof item.subject !== 'string' || typeof item.updatedAt !== 'string' || item.status !== 'draft' || (item.buttondownId !== undefined && typeof item.buttondownId !== 'string'))) throw new Error()
+    if (!Array.isArray(parsed) || parsed.some((item) => !item || typeof item.id !== 'string' || typeof item.content !== 'string' || typeof item.subject !== 'string' || typeof item.updatedAt !== 'string' || item.status !== 'draft' || (item.buttondownId !== undefined && typeof item.buttondownId !== 'string') || (item.description !== undefined && (typeof item.description !== 'string' || item.description.length > 200)) || (item.buttondownTemplate !== undefined && !['classic', 'modern'].includes(item.buttondownTemplate)) || (item.editionDate !== undefined && (typeof item.editionDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(item.editionDate))))) throw new Error()
     return parsed
   } catch {
     throw new Error('Não foi possível ler os rascunhos deste navegador. Os dados originais foram preservados; exporte um backup antes de recuperar o armazenamento.')

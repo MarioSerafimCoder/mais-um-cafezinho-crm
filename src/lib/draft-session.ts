@@ -1,11 +1,11 @@
 import type { DraftRecord } from '../types'
 import type { DocumentNode } from '../../shared/safety'
 import { isEditorDocument } from '../../shared/safety'
-import { ensureUnsubscribeLink, validateDraftPayload } from './email'
+import { validateDraftPayload } from './email'
 import { readDrafts, writeDraft } from './storage'
 
 export type SaveState = 'alterado' | 'salvando' | 'salvo' | 'erro'
-type SyncPayload = { id?: string; subject: string; body: string; createKey?: string }
+type SyncPayload = { id?: string; subject: string; body: string; description?: string; buttondownTemplate?: 'classic' | 'modern'; createKey?: string }
 
 /** The structured snapshot is saved synchronously; network replies only merge metadata. */
 export class DraftSession {
@@ -27,7 +27,7 @@ export class DraftSession {
   private emit() { this.onChange() }
   clearError() { this.error = ''; this.emit() }
 
-  edit(patch: Partial<Pick<DraftRecord, 'subject' | 'templateId' | 'document'>>) {
+  edit(patch: Partial<Pick<DraftRecord, 'subject' | 'description' | 'buttondownTemplate' | 'editionDate' | 'templateId' | 'document'>>) {
     if (patch.document && !isEditorDocument(patch.document)) throw new Error('O documento contém uma estrutura ou atributo não permitido.')
     if (Object.entries(patch).every(([key, value]) => JSON.stringify(this.value[key as keyof DraftRecord]) === JSON.stringify(value))) return
     this.value = { ...this.value, ...structuredClone(patch), schemaVersion: 2, revision: (this.value.revision || 0) + 1, updatedAt: new Date().toISOString() }
@@ -69,15 +69,15 @@ export class DraftSession {
       if (!pending || snapshot.buttondownId) {
         // getEmailHTML captures editor JSON synchronously before starting its async render.
         const html = await exportHtml()
-        const payload = validateDraftPayload(snapshot.subject, ensureUnsubscribeLink(html))
-        pending = { key: snapshot.createKey || `crm-${snapshot.id}`, subject: payload.subject, body: payload.body, revision: snapshot.revision || 0 }
+        const payload = validateDraftPayload(snapshot.subject, html)
+        pending = { key: snapshot.createKey || `crm-${snapshot.id}`, subject: payload.subject, body: payload.body, description: snapshot.description || '', template: snapshot.buttondownTemplate || 'classic', revision: snapshot.revision || 0 }
       }
       if (!snapshot.buttondownId) {
         this.value = { ...this.value, createKey: pending.key, pendingCreate: pending }
         this.save() // Retrying an uncertain creation must resend exactly the same payload/key.
         if (beforeCreate) await beforeCreate()
       }
-      const response = await send({ id: snapshot.buttondownId, subject: pending.subject, body: pending.body, createKey: pending.key })
+      const response = await send({ id: snapshot.buttondownId, subject: pending.subject, body: pending.body, description: pending.description, buttondownTemplate: pending.template, createKey: pending.key })
       if (!response.id) throw new Error('A Buttondown não retornou o identificador do rascunho.')
       this.value = { ...this.value, buttondownId: response.id, lastSyncedAt: new Date().toISOString(), syncedRevision: pending.revision, pendingCreate: undefined }
       this.save()

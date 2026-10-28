@@ -1,11 +1,7 @@
 import { isSafeEmailBody, byteLength } from '../../shared/safety'
 
-export function ensureUnsubscribeLink(html: string) {
-  if (/<a\b[^>]*href\s*=\s*["']\{\{\s*unsubscribe_url\s*\}\}["']/i.test(html)) return html
-  const footer = '<p style="font-size:12px;color:#68645e">Você recebeu esta mensagem porque assinou o Mais um Cafezinho. <a href="{{ unsubscribe_url }}">Descadastrar-se</a>.</p>'
-  if (/<\/body\s*>/i.test(html)) return html.replace(/<\/body\s*>/i, `${footer}</body>`)
-  return `${html}${footer}`
-}
+/** Buttondown's Classic and Modern templates add the compliant unsubscribe footer. */
+export function preserveEmailHtml(html: string) { return html }
 
 export function validateDraftPayload(subject: string, html: string) {
   const cleanSubject = subject.trim()
@@ -22,7 +18,7 @@ export function validateDraftPayload(subject: string, html: string) {
 // Newsletter scaffolding remains controlled by Buttondown on the Free plan.
 export function compatibleEmailBody(html: string) {
   if (!isSafeEmailBody(html)) throw new Error('HTML não permitido.')
-  const fragment = ensureUnsubscribeLink(extractEmailBody(html)).replace(/<!--(?:\$|\/\$|html|head|body)-->/g, '').trim()
+  const fragment = extractEmailBody(html).replace(/<!--(?:\$|\/\$|html|head|body)-->/g, '').trim()
   // Markdown treats indented/blank lines as code. Keep a single physical HTML
   // line; character references preserve visible newlines, including in <pre>.
   let preDepth = 0

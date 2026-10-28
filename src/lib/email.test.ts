@@ -1,24 +1,31 @@
 import { describe, expect, it } from 'vitest'
 import { templates } from '../data/templates'
-import { extractEmailBody, ensureUnsubscribeLink, validateDraftPayload } from './email'
-import { isSafeEmailBody, safePage } from '../../functions/_utils'
+import { extractEmailBody, preserveEmailHtml, validateDraftPayload } from './email'
+import { buildEditorialEmail } from './email-layout'
+import { draftPayload, isSafeEmailBody, safePage } from '../../functions/_utils'
 
 describe('newsletter templates', () => {
-  it('provides the three editorial starting points with Buttondown unsubscribe tags', () => {
+  it('provides three distinct, link-safe editorial starting points and recommends Classic per email', () => {
     expect(templates.map((template) => template.id)).toEqual(['blog', 'curadoria', 'especial'])
-    for (const template of templates) expect(template.content).toContain('{{ unsubscribe_url }}')
+    for (const template of templates) {
+      expect(template.preheader).toBeTruthy()
+      expect(template.buttondownTemplate).toBe('classic')
+      expect(template.content).not.toContain('example.com')
+      expect(template.content).not.toContain('{{ unsubscribe_url }}')
+      expect(isSafeEmailBody(template.content)).toBe(true)
+    }
   })
 })
 
 describe('draft HTML', () => {
-  it('keeps an existing unsubscribe link without duplicating it', () => {
+  it('preserves editor HTML and leaves the unsubscribe footer to Buttondown', () => {
     const html = '<html><body><p><a href="{{ unsubscribe_url }}">Sair</a></p></body></html>'
-    expect(ensureUnsubscribeLink(html)).toBe(html)
+    expect(preserveEmailHtml(html)).toBe(html)
   })
 
-  it('adds the unsubscribe link inside the email body when missing', () => {
-    const html = ensureUnsubscribeLink('<html><body><p>Oi</p></body></html>')
-    expect(html.indexOf('{{ unsubscribe_url }}')).toBeLessThan(html.indexOf('</body>'))
+  it('does not duplicate the Buttondown unsubscribe footer in the body', () => {
+    const html = '<html><body><p>Oi</p></body></html>'
+    expect(preserveEmailHtml(html)).toBe(html)
   })
 
   it('marks Buttondown content as rich HTML and always creates a draft', () => {
@@ -26,7 +33,7 @@ describe('draft HTML', () => {
     expect(result.subject).toBe('Uma edição')
     expect(result.body).toContain('buttondown-editor-mode: plaintext')
     expect(result.body).not.toContain('<html>')
-    expect(result.body).toContain('{{ unsubscribe_url }}')
+    expect(result.body).not.toContain('{{ unsubscribe_url }}')
     expect(result.status).toBe('draft')
   })
 
@@ -60,6 +67,30 @@ describe('draft HTML', () => {
     expect(body).not.toContain('<!--head-->')
     expect(body).not.toContain('\n')
     expect(body).toContain('<td>Olá mundo</td>')
+  })
+
+  it('wraps structured editor HTML in a responsive table frame with inline, safe styles', () => {
+    const html = buildEditorialEmail('<h1>Uma edição</h1><p>Texto <a href="https://marioserafim.com.br">com link</a>.</p>', { newsletterName: 'Mais um Cafezinho', editionLabel: 'ARTIGO', editionDate: '2026-10-28' })
+    expect(html).toContain('role="presentation"')
+    expect(html).toContain('max-width:640px')
+    expect(html).toMatch(/font-family:\s*Georgia/)
+    expect(html).toContain('28 de outubro de 2026')
+    expect(isSafeEmailBody(html)).toBe(true)
+    expect(html).not.toMatch(/<style|<script|display:\s*(?:flex|grid)/i)
+  })
+
+  it('keeps editor-inserted images fluid and their alt text in the email body', () => {
+    const html = buildEditorialEmail('<p>Uma imagem de apoio.</p><img src="https://example.com/foto.jpg" alt="Caderno de referências" />', { newsletterName: 'Mais um Cafezinho', editionLabel: 'ENSAIO', editionDate: '2026-10-28' })
+    expect(html).toContain('max-width: 100%')
+    expect(html).toContain('alt="Caderno de referências"')
+    expect(isSafeEmailBody(html)).toBe(true)
+  })
+
+  it('allows only draft metadata and the Classic/Modern per-email templates', () => {
+    expect(draftPayload({ subject: 'Teste', body: '<p>Olá</p>', status: 'draft', description: 'Uma prévia curta', template: 'classic' })).toEqual({ subject: 'Teste', body: '<p>Olá</p>', status: 'draft', description: 'Uma prévia curta', template: 'classic' })
+    expect(draftPayload({ subject: 'Teste', body: '<p>Olá</p>', status: 'sent', template: 'modern' })).toBeNull()
+    expect(draftPayload({ subject: 'Teste', body: '<p>Olá</p>', status: 'draft', template: 'naked' })).toBeNull()
+    expect(draftPayload({ subject: 'Teste', body: '<p>Olá</p>', status: 'draft', description: '<img src=x>' })).toBeNull()
   })
 })
 

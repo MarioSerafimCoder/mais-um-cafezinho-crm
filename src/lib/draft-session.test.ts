@@ -15,6 +15,14 @@ describe('integridade de rascunhos', () => {
     expect(send).toHaveBeenCalledOnce()
     expect(readDrafts()).toHaveLength(1)
   })
+  it('persiste preheader, data e template externo no rascunho antes de sincronizar', async () => {
+    const session = new DraftSession(initial)
+    session.edit({ description: 'Uma prévia curta', buttondownTemplate: 'classic', editionDate: '2026-10-28' })
+    const send = vi.fn().mockResolvedValue({ id: 'em_editorial' })
+    await session.sync(async () => '<p>Texto</p>', send)
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ description: 'Uma prévia curta', buttondownTemplate: 'classic' }))
+    expect(readDrafts()[0]).toMatchObject({ description: 'Uma prévia curta', buttondownTemplate: 'classic', editionDate: '2026-10-28' })
+  })
   it('salva JSON sem depender da exportação HTML e não duplica o id', () => {
     const session = new DraftSession(initial)
     session.edit({ subject: 'Novo' }); session.save(); session.save()

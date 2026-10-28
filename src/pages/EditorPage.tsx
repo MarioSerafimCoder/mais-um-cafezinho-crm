@@ -7,7 +7,8 @@ import '@react-email/editor/themes/default.css'
 import { ArrowLeft, ArrowDown, ArrowUp, Copy, Monitor, Redo2, Save, Smartphone, Trash2, Undo2, UploadCloud } from 'lucide-react'
 import { api, ApiError } from '../lib/api'
 import { getTemplate, templates } from '../data/templates'
-import { ensureUnsubscribeLink, extractEmailBody, compatibleEmailBody } from '../lib/email'
+import { extractEmailBody, compatibleEmailBody } from '../lib/email'
+import { buildEditorialEmail } from '../lib/email-layout'
 import { contentQuality } from '../lib/content-quality'
 import { DeliveryPreparation } from '../components/DeliveryPreparation'
 import { downloadDraftBackup, readDrafts, readSettings, writeDraft } from '../lib/storage'
@@ -19,6 +20,8 @@ import { assertDocumentSupported, blockAction, currentBlock, documentBlocks, rep
 
 type Editor = NonNullable<EmailEditorRef['editor']>
 const dateLabel = (date?: string) => date ? new Date(date).toLocaleString('pt-BR') : 'Ainda não sincronizado'
+const localDate = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+const campaignDate = (value?: string | null) => { const date = value ? new Date(value) : new Date(); return Number.isNaN(date.valueOf()) ? localDate() : localDate(date) }
 
 function downloadRecord(draft: DraftRecord) {
   const url = URL.createObjectURL(new Blob([JSON.stringify(draft, null, 2)], { type: 'application/json' }))
@@ -80,7 +83,7 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
       local = readDrafts().find((item) => item.id === routeId || item.buttondownId === routeId)
       if (routeId === 'new') {
         const template = getTemplate(templateId, readSettings())
-        const fresh: DraftRecord = { id: `local-${crypto.randomUUID()}`, subject: template.subject, content: template.content, templateId: template.id, status: 'draft', updatedAt: new Date().toISOString(), revision: 0 }
+        const fresh: DraftRecord = { id: `local-${crypto.randomUUID()}`, subject: template.subject, description: template.preheader, buttondownTemplate: template.buttondownTemplate, editionDate: localDate(), content: template.content, templateId: template.id, status: 'draft', updatedAt: new Date().toISOString(), revision: 0 }
         writeDraft(fresh)
         navigate(`/editor/${fresh.id}`, { replace: true })
         return
@@ -108,7 +111,7 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
       const campaign = await api.campaign(routeId)
       if (!active) return
       if (campaign.status !== 'draft') throw new Error('Só rascunhos podem ser editados por este painel.')
-      owned = install({ id: `bd-${campaign.id}`, buttondownId: campaign.id, subject: campaign.subject || '', content: extractEmailBody(campaign.body || ''), templateId: null, status: 'draft', updatedAt: new Date().toISOString(), revision: 0 })
+      owned = install({ id: `bd-${campaign.id}`, buttondownId: campaign.id, subject: campaign.subject || '', description: campaign.description || '', buttondownTemplate: campaign.template === 'classic' || campaign.template === 'modern' ? campaign.template : 'modern', editionDate: campaignDate(campaign.publish_date || campaign.creation_date), content: extractEmailBody(campaign.body || ''), templateId: null, status: 'draft', updatedAt: new Date().toISOString(), revision: 0 })
     }).catch((cause: unknown) => {
       if (!active) return
       if (local) { setIntegration({ configured: false, connected: false, demo: false }); setError('Sem conexão. Continue editando: o salvamento neste navegador permanece disponível.') }
@@ -163,7 +166,14 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
 
   const exportHtml = async () => {
     if (!ref.current?.editor) throw new Error('O editor ainda está carregando.')
-    const result = ensureUnsubscribeLink(await ref.current.getEmailHTML())
+    const draft = sessionRef.current?.value
+    const settings = readSettings()
+    const result = buildEditorialEmail(await ref.current.getEmailHTML(), {
+      newsletterName: settings.newsletterName,
+      editionLabel: templates.find((item) => item.id === draft?.templateId)?.category || 'NOTAS EDITORIAIS',
+      editionDate: draft?.editionDate || '',
+      buttondownTemplate: draft?.buttondownTemplate || 'classic',
+    })
     if (!isSafeEmailBody(result)) throw new Error('O HTML contém marcação não permitida ou excede o limite. O documento editável continua salvo.')
     return result
   }
@@ -238,13 +248,19 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
       <section className="editor-center">
         <div className="editor-toolbar"><label className="insert-menu">Inserir bloco <select aria-label="Inserir bloco" value="" disabled={preview} onChange={(event) => insert(event.target.value)}><option value="">Escolher…</option><optgroup label="Texto"><option value="paragraph">Parágrafo</option><option value="heading">Título de seção</option><option value="quote">Citação</option></optgroup><optgroup label="Mídia e links"><option value="image">Imagem</option><option value="button">Botão</option></optgroup><optgroup label="Estrutura"><option value="divider">Divisória</option></optgroup></select></label><div className="toolbar-history toolbar-group"><button className="icon-button" aria-label="Desfazer" disabled={preview} onClick={() => editor?.chain().focus().undo().run()}><Undo2 size={16} /></button><button className="icon-button" aria-label="Refazer" disabled={preview} onClick={() => editor?.chain().focus().redo().run()}><Redo2 size={16} /></button></div></div>
         <div className={`editor-canvas${preview ? ' is-preview' : ''}`}><div className="canvas-ruler"><span>{preview ? 'PRÉVIA DO HTML EXPORTADO' : 'EDIÇÃO EM CURSO'}</span><div className="canvas-view-actions"><button className={!preview ? 'selected' : ''} onClick={() => { previewRequest.current++; setPreviewBusy(false); setPreview(false); requestAnimationFrame(() => { if (editor && previewSelection.current) editor.chain().focus().setTextSelection(previewSelection.current).run(); else editor?.commands.focus() }) }}>Escrever</button><button className={preview ? 'selected' : ''} onClick={() => void openPreview()} disabled={previewBusy}>{previewBusy ? 'Gerando…' : 'Prévia'}</button></div></div>
-          {preview && <><p>Revisão local {draft.revision || 0} · sincronizada {draft.syncedRevision ?? "nenhuma"} · D1 {draft.cloudRevision ?? "não salvo"}</p>{contentQuality(html).map(warning => <p role="status" key={warning}>{warning}</p>)}<label>Fonte da prévia<select aria-label="Fonte da prévia" value={previewKind} onChange={e => setPreviewKind(e.target.value as 'original' | 'compatible')}><option value="original">HTML original exportado</option><option value="compatible">Fragmento compatível enviado à Buttondown</option></select></label><p>Aparência no navegador. Gmail e Outlook podem alterar fontes, espaçamento e responsividade. A Buttondown acrescenta seu template e resolve o descadastro.</p>{draft.buttondownId ? <a href={`https://buttondown.com/emails/${encodeURIComponent(draft.buttondownId)}`} target="_blank" rel="noopener noreferrer">Conferir resultado processado na Buttondown (última sincronização)</a> : <p>Resultado processado indisponível: este documento ainda não foi sincronizado.</p>}<div className={`email-preview-frame ${device}`}><iframe title="Prévia da newsletter" sandbox="" referrerPolicy="no-referrer" srcDoc={previewKind === 'original' ? html : compatibleEmailBody(html)} /></div><div className="preview-device-controls"><button onClick={() => setDevice('desktop')}><Monitor size={14} />Desktop</button><button onClick={() => setDevice('mobile')}><Smartphone size={14} />Celular</button></div></>}
+          {preview && <><p>Revisão local {draft.revision || 0} · sincronizada {draft.syncedRevision ?? "nenhuma"} · D1 {draft.cloudRevision ?? "não salvo"}</p>{contentQuality(html).map(warning => <p role="status" key={warning}>{warning}</p>)}<label>Fonte da prévia<select aria-label="Fonte da prévia" value={previewKind} onChange={e => setPreviewKind(e.target.value as 'original' | 'compatible')}><option value="original">HTML original exportado</option><option value="compatible">Fragmento compatível enviado à Buttondown</option></select></label><p>Prévia simulada do HTML do CRM. A moldura {draft.buttondownTemplate === 'modern' ? 'Modern usa o masthead e a data da Buttondown; o CRM omite o cabeçalho próprio para evitar repetição' : 'Classic usa o cabeçalho editorial do CRM'}; o rodapé de descadastro é processado pela Buttondown fora desta tela. Modern também pode exibir seu preâmbulo em inglês. Gmail e Outlook podem alterar fontes, espaçamento e responsividade; esta simulação não substitui testes nesses clientes.</p>{draft.buttondownId ? <a href={`https://buttondown.com/emails/${encodeURIComponent(draft.buttondownId)}`} target="_blank" rel="noopener noreferrer">Conferir resultado processado na Buttondown (última sincronização)</a> : <p>Resultado processado indisponível: este documento ainda não foi sincronizado.</p>}<div className={`email-preview-frame ${device}`}><iframe title="Prévia da newsletter" sandbox="" referrerPolicy="no-referrer" srcDoc={previewKind === 'original' ? html : compatibleEmailBody(html)} /></div><div className="preview-device-controls"><button onClick={() => setDevice('desktop')}><Monitor size={14} />Desktop</button><button onClick={() => setDevice('mobile')}><Smartphone size={14} />Celular</button></div></>}
           <div className="email-editor-container" style={{ display: preview ? 'none' : undefined }}><EmailEditor key={`${initial.id}:${generation}`} ref={attach} onReady={onReady} onUpdate={onUpdate} content={initial.document || initial.content} extensions={extensions} theme="basic" placeholder="Pressione / para inserir um bloco" /></div>
         </div>
         <div className="editor-canvas-footer"><span>Documento editável em JSON · HTML gerado para prévia e Buttondown</span><button className="html-toggle" onClick={() => run(async () => { setHtml(await exportHtml()); setShowHtml((value) => !value) })}>{showHtml ? 'Fechar HTML' : 'Ver HTML'}</button></div>{showHtml && <pre className="html-output">{html}</pre>}
       </section>
       <aside className="editor-inspector"><div className="inspector-title"><div><p className="eyebrow">FERRAMENTAS</p><h2>Composição</h2></div></div>
         <details className="inspector-section"><summary>Templates</summary><Field label="Ponto de partida"><select value={draft.templateId || ''} disabled={preview || busy} onChange={(event) => setReplacement(event.target.value as NewsletterTemplateId)}><option value="" disabled>Importado / sem template</option>{templates.map((item) => <option value={item.id} key={item.id}>{item.number} · {item.name}</option>)}</select></Field><span className="inspector-hint">A troca pede confirmação e pode ser desfeita.</span></details>
+        <section className="inspector-section"><span className="inspector-label">PUBLICAÇÃO</span>
+          <Field label="Texto de prévia (preheader)"><input maxLength={200} value={draft.description || ''} disabled={preview || busy} onChange={(event) => { session.edit({ description: event.target.value }); schedule() }} /></Field>
+          <Field label="Data da edição"><input type="date" value={draft.editionDate || ''} disabled={preview || busy} onChange={(event) => { session.edit({ editionDate: event.target.value }); schedule() }} /></Field>
+          <Field label="Template desta edição na Buttondown"><select aria-label="Template desta edição na Buttondown" value={draft.buttondownTemplate || 'classic'} disabled={preview || busy} onChange={(event) => { session.edit({ buttondownTemplate: event.target.value as 'classic' | 'modern' }); schedule() }}><option value="classic">Classic · conteúdo em primeiro plano (recomendado)</option><option value="modern">Modern · masthead e identidade Buttondown</option></select></Field>
+          <span className="inspector-hint">A escolha é enviada somente neste rascunho. Classic mantém o conteúdo editorial à frente; Modern acrescenta masthead, assunto, data e um preâmbulo em inglês. A moldura do CRM se ajusta para evitar repetir marca e cabeçalho.</span>
+        </section>
         <section className="inspector-section"><span className="inspector-label">BLOCO SELECIONADO {selected ? `${selected.index + 1} / ${selected.parent.childCount}` : ''}</span><div className="block-actions">{([['up', 'Subir', ArrowUp], ['down', 'Descer', ArrowDown], ['duplicate', 'Duplicar', Copy], ['delete', 'Excluir bloco', Trash2]] as const).map(([action, label, Icon]) => <button key={action} disabled={preview || !editor} onMouseDown={(event) => event.preventDefault()} onClick={() => editor && blockAction(editor, action)}><Icon size={14} />{label}</button>)}</div>
           {editor && <ol className="block-outline" aria-label="Estrutura da edição">{outline.map((block, index) => <li key={block.position}><button disabled={preview} aria-current={selected?.position === block.position ? 'true' : undefined} onClick={() => editor.chain().focus().setTextSelection(Math.min(block.position + 1, editor.state.doc.content.size)).scrollIntoView().run()}>{index + 1}. {block.label}</button></li>)}</ol>}
         </section>
@@ -255,7 +271,7 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
       </aside>
     </div>
     <div className="editor-bottom-bar"><StatusPill tone={integration?.connected ? 'success' : 'warning'}>{session.syncing ? 'SINCRONIZANDO' : integration?.connected ? 'BUTTONDOWN CONECTADA' : 'SALVAMENTO LOCAL'}</StatusPill><span className="safe-footer-copy">{session.dirty ? 'Há alterações ainda não persistidas.' : 'Cópia local preservada.'}</span></div>
-    {replacement && <div className="editor-dialog-backdrop"><section role="dialog" aria-modal="true" aria-label="Trocar template" className="editor-dialog"><h2>Trocar o ponto de partida?</h2><p>O conteúdo e o assunto serão substituídos. Desfazer recupera o conteúdo; o backup exportado também conserva o assunto anterior.</p><Button variant="outline" onClick={() => setReplacement(null)}>Cancelar</Button><Button onClick={() => run(() => { if (!editor) return; downloadRecord(session.value); const template = getTemplate(replacement, readSettings()); replaceTemplate(editor, template.content); session.edit({ subject: template.subject, templateId: template.id }); capture(ref.current!); schedule(); setReplacement(null) })}>Substituir conteúdo e assunto</Button></section></div>}
+    {replacement && <div className="editor-dialog-backdrop"><section role="dialog" aria-modal="true" aria-label="Trocar template" className="editor-dialog"><h2>Trocar o ponto de partida?</h2><p>O conteúdo, assunto e texto de prévia serão substituídos. Desfazer recupera o conteúdo; o backup exportado também conserva o assunto anterior.</p><Button variant="outline" onClick={() => setReplacement(null)}>Cancelar</Button><Button onClick={() => run(() => { if (!editor) return; downloadRecord(session.value); const template = getTemplate(replacement, readSettings()); replaceTemplate(editor, template.content); session.edit({ subject: template.subject, description: template.preheader, buttondownTemplate: template.buttondownTemplate, templateId: template.id }); capture(ref.current!); schedule(); setReplacement(null) })}>Substituir conteúdo e assunto</Button></section></div>}
     {blocker.state === 'blocked' && <div className="editor-dialog-backdrop"><section role="dialog" aria-modal="true" aria-label="Alterações não salvas" className="editor-dialog"><h2>Ainda há alterações sem salvar.</h2><p>Salve neste navegador ou continue a edição antes de sair.</p><Button variant="outline" onClick={() => blocker.reset()}>Continuar editando</Button><Button onClick={() => run(() => { saveLocal(); blocker.proceed() })}>Salvar e sair</Button><Button variant="quiet" onClick={() => blocker.proceed()}>Sair sem salvar</Button></section></div>}
   </div>
 }

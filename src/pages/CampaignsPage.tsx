@@ -8,7 +8,7 @@ import type { Campaign } from '../types'
 import { Button, DemoNotice, EmptyState, ErrorState, LoadingState, PageTitle, StatusPill } from '../components/ui'
 
 function localCampaigns(): Campaign[] {
-  return readDrafts().map((draft) => ({ id: draft.id, subject: draft.subject || 'Sem assunto', status: 'draft', creation_date: draft.updatedAt, body: draft.content, buttondownId: draft.buttondownId, demo: false, origin: 'local' }))
+  return readDrafts().map((draft) => ({ id: draft.id, subject: draft.subject || 'Sem assunto', description: draft.description, template: draft.buttondownTemplate, status: 'draft', creation_date: draft.updatedAt, body: draft.content, buttondownId: draft.buttondownId, demo: false, origin: 'local' }))
 }
 
 function campaignDateLabel(date?: string | null, includeTime = false) {
@@ -83,7 +83,7 @@ export function CampaignsPage() {
     if (!campaign.body) return
     try {
       const original = readDrafts().find((item) => item.id === campaign.id)
-      writeDraft({ id: `local-${crypto.randomUUID()}`, subject: `${campaign.subject} — cópia`, content: campaign.body, document: original?.document ? structuredClone(original.document) : undefined, schemaVersion: original?.document ? 2 : undefined, templateId: original?.templateId || null, status: 'draft', revision: 0, updatedAt: timestampNow() })
+      writeDraft({ id: `local-${crypto.randomUUID()}`, subject: `${campaign.subject} — cópia`, description: campaign.description || original?.description, buttondownTemplate: campaign.template === 'classic' || campaign.template === 'modern' ? campaign.template : original?.buttondownTemplate, editionDate: original?.editionDate, content: campaign.body, document: original?.document ? structuredClone(original.document) : undefined, schemaVersion: original?.document ? 2 : undefined, templateId: original?.templateId || null, status: 'draft', revision: 0, updatedAt: timestampNow() })
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível duplicar sem perder conteúdo.'); return }
     setReload((value) => value + 1)
   }

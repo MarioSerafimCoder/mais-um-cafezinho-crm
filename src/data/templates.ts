@@ -1,5 +1,6 @@
 import type { Campaign, DashboardSummary, NewsletterSettings, NewsletterTemplateId, Subscriber } from '../types'
 import { escapeHtml, safeUrl } from '../../shared/urls'
+import { emailPreviewDocument, type EmailLayoutOptions } from '../lib/email-layout'
 
 export type NewsletterTemplate = {
   id: NewsletterTemplateId
@@ -8,90 +9,99 @@ export type NewsletterTemplate = {
   summary: string
   category: string
   subject: string
+  preheader: string
+  buttondownTemplate: 'classic' | 'modern'
   content: string
 }
 
-const signature = `
-<hr />
-<p><strong>Mais um Cafezinho</strong><br />Uma conversa sem pressa sobre o que merece atenção.</p>
-<p><a href="https://marioserafim.com.br">Portfólio</a> &nbsp;·&nbsp; <a href="https://marioserafim.com.br/blog">Blog</a></p>
-<p><a href="{{ unsubscribe_url }}">Descadastrar desta newsletter</a></p>`
+const signature = `<hr />
+<p>Até a próxima,<br /><strong>Mário Serafim</strong> · Diretor de arte.</p>
+<p><a href="https://marioserafim.com.br">Portfólio</a> &nbsp;·&nbsp; <a href="https://marioserafim.com.br/blog">Blog</a>[[OPTIONAL_EDITORIAL_LINKS]]</p>
+<p>Se uma ideia ficar na cabeça, responda este e-mail. Eu leio.</p>`
 
 export const templates: NewsletterTemplate[] = [
   {
     id: 'blog',
     number: '01',
     name: 'Novidades do blog',
-    summary: 'Um artigo novo, contexto suficiente e um convite para continuar a conversa.',
+    summary: 'Uma ideia do blog, com contexto para a conversa começar antes do clique.',
     category: 'ARTIGO',
-    subject: 'Saiu do forno: um texto novo no blog',
-    content: `<p>EDIÇÃO · MAIS UM CAFEZINHO</p>
-<h1>Uma ideia que merecia sair da gaveta</h1>
-<p>Um texto novo, uma implicância antiga e a chance de conversar sem o algoritmo interrompendo.</p>
-<h2>O que tem por trás deste texto?</h2>
-<p>Conte o que te fez escrever. Abra uma janela para a ideia — a visita guiada fica para o artigo.</p>
-<blockquote><p>Um comentário seu, uma provocação ou a frase que ficou depois de fechar o arquivo.</p></blockquote>
-<p><a href="https://marioserafim.com.br/blog">Ler o artigo completo →</a></p>${signature}`,
+    subject: 'O que vem antes do logo',
+    preheader: 'Uma conversa sobre as decisões que aparecem antes da primeira tela.',
+    buttondownTemplate: 'classic',
+    content: `<h1>Um bom projeto começa antes do logo</h1>
+<p>O logo costuma chegar no fim da conversa — embora seja a primeira coisa que todo mundo pergunta. Antes dele vêm as perguntas menos fotogênicas: o que precisa mudar, para quem, e por que alguém deveria se importar?</p>
+<h2>A parte que não cabe numa prancha</h2>
+<p>Identidade visual não é uma coleção de peças bonitas. É um jeito de organizar percepção e tomar decisões com alguma coerência, inclusive quando ninguém está olhando para a apresentação.</p>
+<blockquote><p>Se a estratégia só aparece no slide de estratégia, talvez ela ainda não tenha chegado ao projeto.</p></blockquote>
+<p>Escrevi mais sobre esse começo — e sobre a tentação de pular direto para a forma — no blog.</p>
+<p><a href="https://marioserafim.com.br/blog" style="display:inline-block;background-color:#b52930;color:#ffffff;text-decoration:none;font-weight:bold;padding:13px 19px">Continuar a leitura&nbsp;→</a></p>${signature}`,
   },
   {
     id: 'curadoria',
     number: '02',
     name: 'Curadoria editorial',
-    summary: 'Referências, projetos e ideias que valem dividir com mais alguém.',
+    summary: 'Links comentados e pequenas descobertas, sem transformar favoritos numa lista automática.',
     category: 'REFERÊNCIAS',
-    subject: 'Coisas boas que encontrei pelo caminho',
-    content: `<p>EDIÇÃO · MAIS UM CAFEZINHO</p>
-<h1>Pequenas descobertas, grande vontade de compartilhar</h1>
-<p>Algumas coisas me fizeram parar o scroll. Achei justo dividir, já que o café ainda está quente.</p>
+    subject: 'Notas de repertório: três ideias da semana',
+    preheader: 'Uma referência visual, uma ideia incômoda e uma leitura para guardar.',
+    buttondownTemplate: 'classic',
+    content: `<h1>Três coisas que mereciam sair dos favoritos</h1>
+<p>Minha pasta de links salvos é um arquivo arqueológico: muita intenção, pouca visita. Separei três coisas que sobreviveram à escavação desta semana.</p>
+<h2>01 / Uma referência visual</h2>
+<p><strong>Projeto e autoria</strong><br />Adicione o endereço real da referência junto ao nome. O que me fez parar: uma decisão de forma que parece simples depois que alguém a toma.</p>
 <hr />
-<h2>01 / Um projeto para visitar com calma</h2>
-<p><strong>Nome da referência</strong> · Fonte ou autoria</p>
-<p>O que é, por que chamou minha atenção e onde isso toca o nosso trabalho.</p>
-<p><a href="https://example.com">Ver a referência →</a></p>
+<h2>02 / Uma ideia para discordar</h2>
+<p><strong>Texto ou argumento</strong><br />Adicione o endereço real da leitura junto ao título. Não precisa concordar comigo. O ponto é que esta ideia muda a pergunta que eu vinha fazendo.</p>
 <hr />
-<h2>02 / Uma ideia para levar junto</h2>
-<p>Inclua outra referência, estudo ou descoberta. O comentário pessoal é o que transforma uma lista em curadoria.</p>
-<p><a href="https://example.com">Abrir o link original →</a></p>${signature}`,
+<h2>03 / Uma coisa fora da tela</h2>
+<p>Um objeto, conversa ou detalhe cotidiano que também merece entrar no repertório. A internet não precisa ganhar todas.</p>
+<p>O comentário pessoal é o que transforma uma lista de links numa curadoria. Corte qualquer item que esteja aqui só para fechar a conta.</p>${signature}`,
   },
   {
     id: 'especial',
     number: '03',
     name: 'Edição especial',
-    summary: 'Mais espaço para uma ideia longa, uma imagem marcante ou uma narrativa.',
+    summary: 'Um ensaio com mais respiro, citação destacada e espaço opcional para imagem.',
     category: 'ENSAIO',
-    subject: 'Uma edição especial, sem olhar o relógio',
-    content: `<p>EDIÇÃO ESPECIAL · MAIS UM CAFEZINHO</p>
-<h1>Uma história que pede mais uma xícara</h1>
-<p><em>Uma frase de abertura, um detalhe curioso ou aquela imagem que continua na cabeça.</em></p>
-<p>Comece por aqui. Edições especiais podem ser mais longas; ainda assim, deixe espaço para o leitor respirar entre uma ideia e outra.</p>
-<h2>Uma pausa para olhar de novo</h2>
-<p>Traga uma imagem, uma citação ou uma seção curta para mudar o ritmo. Depois, conte o que ela significa para você.</p>
-<blockquote><p>Uma frase destacada para marcar o compasso da edição.</p></blockquote>
-<h2>Continuando a conversa</h2>
-<p>Desenvolva a ideia com o contexto necessário, sem perder a voz de quem está escrevendo para uma pessoa — não para uma planilha.</p>
-<p>Obrigado por dividir este café comigo.</p>${signature}`,
+    subject: 'O enquadramento também conta uma história',
+    preheader: 'Um ensaio sobre contexto, autoria e o que muda quando a gente olha de novo.',
+    buttondownTemplate: 'classic',
+    content: `<h1>Uma imagem, três leituras possíveis</h1>
+<p><em>Às vezes a gente olha para uma imagem procurando a resposta. Ela devolve uma pergunta — o que é menos conveniente e bem mais interessante.</em></p>
+<p>Este espaço aceita uma imagem editorial, mas também funciona sem ela. Se entrar uma, que seja porque muda a leitura do texto; a caixa de entrada já tem imagens decorativas suficientes para uma vida inteira.</p>
+<h2>O contexto também faz parte da imagem</h2>
+<p>A primeira leitura costuma ser rápida: reconhecemos uma forma, encaixamos numa categoria e seguimos. A segunda exige um pouco mais de tempo. Quem escolheu esse enquadramento? O que ficou do lado de fora? Que detalhe parecia pequeno até alguém apontá-lo?</p>
+<blockquote><p>Uma imagem nunca chega sozinha. Vem com o lugar de onde olhamos — e com tudo o que aprendemos a não ver.</p></blockquote>
+<h2>O que muda quando voltamos</h2>
+<p>Talvez nada. Ainda assim, olhar de novo é uma forma modesta de não deixar a primeira impressão decidir tudo. Se você tiver outra leitura, responda esta mensagem. A conversa continua melhor quando não termina numa conclusão redonda.</p>${signature}`,
   },
 ]
 
 export function getTemplate(id: NewsletterTemplateId | null | undefined, settings?: NewsletterSettings) {
   const template = templates.find((item) => item.id === id) ?? templates[2]
-  if (!settings) return template
-  const links = (url: string, fallback: string) => escapeHtml(safeUrl(url) ? url : fallback)
-  const author = escapeHtml(settings.senderName)
-  const socials = [['Instagram', settings.instagramUrl], ['LinkedIn', settings.linkedinUrl]]
-    .filter(([, url]) => url && safeUrl(url))
-    .map(([label, url]) => `<a href="${escapeHtml(url)}">${label}</a>`).join(' · ')
+  const links = (url: string | undefined, fallback: string) => escapeHtml(url && safeUrl(url) ? url : fallback)
+  const author = escapeHtml(settings?.senderName || 'Mário Serafim')
+  const socials = ([['Instagram', settings?.instagramUrl], ['LinkedIn', settings?.linkedinUrl]] as Array<[string, string | undefined]>)
+    .flatMap(([label, url]) => url && safeUrl(url) ? [`<a href="${escapeHtml(url)}">${label}</a>`] : []).join(' · ')
+  const contact = settings?.senderEmail && safeUrl(`mailto:${settings.senderEmail}`) ? `<a href="mailto:${escapeHtml(settings.senderEmail)}">E-mail</a>` : ''
+  const optional = [socials, contact].filter(Boolean).join(' · ')
   return {
     ...template,
     content: template.content
-      .replace(/https:\/\/marioserafim\.com\.br\/blog|https:\/\/marioserafim\.com\.br/g, (url) => links(url.endsWith('/blog') ? settings.blogUrl : settings.portfolioUrl, url))
-      .replaceAll('Mais um Cafezinho', escapeHtml(settings.newsletterName))
-      .replace('<hr />\n<p><strong>', `<p>Até a próxima xícara,<br /><strong>${author}</strong></p>${socials ? `<p>${socials}</p>` : ''}<hr />\n<p><strong>`),
+      .replace(/https:\/\/marioserafim\.com\.br\/blog|https:\/\/marioserafim\.com\.br/g, (url) => links(url.endsWith('/blog') ? settings?.blogUrl : settings?.portfolioUrl, url))
+      .replaceAll('Mais um Cafezinho', escapeHtml(settings?.newsletterName || 'Mais um Cafezinho'))
+      .replaceAll('Mário Serafim', author)
+      .replace('[[OPTIONAL_EDITORIAL_LINKS]]', optional ? ` &nbsp;·&nbsp; ${optional}` : ''),
   }
 }
 
-export function templatePreview(content: string) {
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{margin:0;background:#fff;color:#171716;font:16px/1.7 Georgia,serif}.edition{max-width:620px;margin:auto;padding:32px 24px}h1{font-size:32px;line-height:1.2}h2{font-size:23px;line-height:1.3}p:first-child{font:11px monospace;color:#b5362b;letter-spacing:1px}a{color:#b5362b}blockquote{border-left:2px solid #c53a2d;padding-left:16px;margin-left:0}hr{border:0;border-top:1px solid #ddd;margin:28px 0}img{max-width:100%;height:auto}</style></head><body><main class="edition">${content}</main></body></html>`
+export function templatePreview(content: string, options?: Partial<EmailLayoutOptions>) {
+  return emailPreviewDocument(content, {
+    newsletterName: options?.newsletterName || 'Mais um Cafezinho',
+    editionLabel: options?.editionLabel || 'EDIÇÃO DE ESTÚDIO',
+    editionDate: options?.editionDate || '',
+  })
 }
 
 export const demoSubscribers: Subscriber[] = [
@@ -107,7 +117,7 @@ export const demoSubscribers: Subscriber[] = [
 export const demoCampaigns: Campaign[] = [
   { id: 'demo-campaign-1', subject: 'Um caderno, três ideias e um café', status: 'sent', creation_date: '2026-10-24T10:00:00Z', publish_date: '2026-10-24T10:00:00Z', demo: true },
   { id: 'demo-campaign-2', subject: 'O que tenho lido, visto e guardado', status: 'sent', creation_date: '2026-10-10T10:00:00Z', publish_date: '2026-10-10T10:00:00Z', demo: true },
-  { id: 'demo-campaign-3', subject: 'Notas sobre prestar atenção', status: 'draft', creation_date: '2026-10-27T10:00:00Z', body: templates[0].content, demo: true },
+  { id: 'demo-campaign-3', subject: 'Notas sobre prestar atenção', description: templates[0].preheader, template: templates[0].buttondownTemplate, status: 'draft', creation_date: '2026-10-27T10:00:00Z', body: getTemplate('blog').content, demo: true },
 ]
 
 export const demoDashboard: DashboardSummary = {

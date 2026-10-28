@@ -3,6 +3,9 @@ export type NewsletterTemplateId = 'blog' | 'curadoria' | 'especial'
 export type DraftRecord = {
   id: string
   subject: string
+  description?: string
+  buttondownTemplate?: 'classic' | 'modern'
+  editionDate?: string
   content: string
   templateId: NewsletterTemplateId | null
   buttondownId?: string
@@ -17,7 +20,7 @@ export type DraftRecord = {
   syncedRevision?: number
   createKey?: string
   cloudSavedRevision?: number
-  pendingCreate?: { key: string; subject: string; body: string; revision: number }
+  pendingCreate?: { key: string; subject: string; body: string; description?: string; template?: 'classic' | 'modern'; revision: number }
 }
 
 export type Subscriber = {
@@ -32,6 +35,8 @@ export type Subscriber = {
 export type Campaign = {
   id: string
   subject: string
+  description?: string
+  template?: string | null
   status: string
   creation_date?: string | null
   publish_date?: string | null

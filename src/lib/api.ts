@@ -38,10 +38,10 @@ export const api = {
   },
   campaigns: (page = 1) => request<ApiPage<Campaign>>(`/api/emails?page=${page}`),
   campaign: (id: string) => request<Campaign>(`/api/emails/${encodeURIComponent(id)}`),
-  saveDraft: (payload: { id?: string; subject: string; body: string; createKey?: string }) => request<Campaign>(payload.id ? `/api/emails/${encodeURIComponent(payload.id)}` : '/api/emails', {
+  saveDraft: (payload: { id?: string; subject: string; body: string; description?: string; buttondownTemplate?: 'classic' | 'modern'; createKey?: string }) => request<Campaign>(payload.id ? `/api/emails/${encodeURIComponent(payload.id)}` : '/api/emails', {
     method: payload.id ? 'PATCH' : 'POST',
     headers: { 'Content-Type': 'application/json', ...(!payload.id && payload.createKey ? { 'X-Idempotency-Key': payload.createKey } : {}) },
-    body: JSON.stringify({ subject: payload.subject, body: payload.body, status: 'draft' }),
+    body: JSON.stringify({ subject: payload.subject, body: payload.body, status: 'draft', ...(payload.description !== undefined ? { description: payload.description } : {}), ...(payload.buttondownTemplate ? { template: payload.buttondownTemplate } : {}) }),
   }),
   uploadImage: async (file: File) => {
     const form = new FormData()

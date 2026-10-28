@@ -6,7 +6,6 @@ export function contentQuality(html: string) {
   if (missingAlt) warnings.push(`${missingAlt} imagem(ns) sem texto alternativo.`)
   const emptyLinks = [...doc.querySelectorAll('a')].filter(link => !link.textContent?.trim() && !link.querySelector('img[alt]')).length
   if (emptyLinks) warnings.push(`${emptyLinks} link(s) sem descrição.`)
-  if (!doc.querySelector('a[href*="unsubscribe_url"]')) warnings.push('Link de descadastro não encontrado no HTML.')
   if (new TextEncoder().encode(html).length > 100000) warnings.push('HTML acima de 100 KB: conferir corte da mensagem no cliente.')
   return warnings
 }

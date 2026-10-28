@@ -43,11 +43,11 @@ test('troca de template exige confirmação e pode ser desfeita', async ({ page 
   const download = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Substituir conteúdo e assunto' }).click()
   await download
-  await expect(body).toContainText('Pequenas descobertas')
+  await expect(body).toContainText('Três coisas que mereciam sair dos favoritos')
   await page.getByRole('button', { name: 'Desfazer', exact: true }).click()
   await expect(body).toContainText('Minha escolha editorial')
   await page.getByRole('button', { name: 'Refazer', exact: true }).click()
-  await expect(body).toContainText('Pequenas descobertas')
+  await expect(body).toContainText('Três coisas que mereciam sair dos favoritos')
 })
 
 test('duplicar, excluir e reordenar blocos preserva o histórico', async ({ page }) => {
@@ -62,11 +62,11 @@ test('duplicar, excluir e reordenar blocos preserva o histórico', async ({ page
   await expect(body.locator('h2')).toHaveCount(1)
   await body.locator('h2').click()
   await page.getByRole('button', { name: 'Subir', exact: true }).click()
-  await expect(body.locator('h2, p').first()).toHaveText('Uma nova ideia')
+  await expect(body.locator('h1, h2, p').first()).toHaveText('Uma nova ideia')
   await page.getByRole('button', { name: 'Descer', exact: true }).click()
-  await expect(body.locator('h2, p').first()).toHaveText('Primeiro bloco')
+  await expect(body.locator('h1, h2, p').first()).toHaveText('Primeiro bloco')
   await page.getByRole('button', { name: 'Desfazer', exact: true }).click()
-  await expect(body.locator('h2, p').first()).toHaveText('Uma nova ideia')
+  await expect(body.locator('h1, h2, p').first()).toHaveText('Uma nova ideia')
 })
 
 test('links, imagens, texto alternativo e HTML derivado', async ({ page }) => {
@@ -152,7 +152,7 @@ test('aplicação de link mantém a seleção e falha no upload preserva o texto
   await body.fill('Uma referência para guardar')
   await body.click()
   await page.keyboard.press('Control+Home')
-  await page.keyboard.press('Control+Shift+End')
+  await page.keyboard.press('Shift+End')
   await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe('Uma referência para guardar')
   await page.getByText('Links e botões', { exact: true }).click()
   await page.getByLabel('Destino do link').fill('https://example.com/referencia')
@@ -177,6 +177,6 @@ test('editor e templates mantêm espaço de escrita em desktop e mobile', async 
   await expect.poll(async () => page.frameLocator('iframe[title="Prévia da newsletter"]').locator('html').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
   await page.getByRole('button', { name: 'Salvar local', exact: true }).click()
   await page.goto('/templates')
-  await expect(page.locator('iframe[title^="Prévia real:"]')).toHaveCount(3)
+  await expect(page.locator('iframe[title^="Simulação no navegador:"]')).toHaveCount(3)
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
 })

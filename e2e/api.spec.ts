@@ -2,11 +2,12 @@ import { expect, test } from '@playwright/test'
 
 test('D1 local aplica controle de versão e rejeita overwrite concorrente', async ({ request }) => {
   const id = `test-${crypto.randomUUID()}`
-  const draft = { id, subject: 'Original', content: '<p>Legado</p>', document: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Documento' }] }] }, status: 'draft', templateId: null, updatedAt: new Date().toISOString(), cloudRevision: 0 }
+  const draft = { id, subject: 'Original', description: 'Preheader de teste', buttondownTemplate: 'classic', editionDate: '2026-10-28', content: '<p>Legado</p>', document: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Documento' }] }] }, status: 'draft', templateId: null, updatedAt: new Date().toISOString(), cloudRevision: 0 }
   const initial = await request.put(`/api/drafts/${id}`, { data: draft })
   expect(initial.status()).toBe(200)
   const saved = await initial.json()
   expect(saved.cloudRevision).toBe(1)
+  expect(saved).toMatchObject({ description: 'Preheader de teste', buttondownTemplate: 'classic', editionDate: '2026-10-28' })
   expect((await request.put(`/api/drafts/${id}`, { data: { ...draft, subject: 'Não sobrescrever' } })).status()).toBe(409)
   expect((await (await request.get(`/api/drafts/${id}`)).json()).subject).toBe('Original')
   expect((await request.put(`/api/drafts/${id}`, { data: { ...saved, subject: 'Atualizado' } })).status()).toBe(200)

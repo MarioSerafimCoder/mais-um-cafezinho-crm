@@ -3,7 +3,7 @@ import type { AppEnv } from '../../_utils'
 
 type Context = { request: Request; env: AppEnv }
 
-function validDraft(value: unknown): value is { subject: string; body: string; status: 'draft' } {
+function validDraft(value: unknown): value is { subject: string; body: string; status: 'draft'; description?: string; template?: 'classic' | 'modern' } {
   if (!value || typeof value !== 'object') return false
   const draft = value as Record<string, unknown>
   return typeof draft.subject === 'string'
