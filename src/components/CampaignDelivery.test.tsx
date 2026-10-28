@@ -37,7 +37,7 @@ it('prepara a audiência e só envia depois da confirmação explícita', async 
   render(<CampaignDelivery draft={draft} />)
 
   screen.getByText('Enviar campanha').closest('summary')?.click()
-  const prepare = await screen.findByRole('button', { name: 'Prévia e contagem' })
+  const prepare = await screen.findByRole('button', { name: 'Revisar prévia e contagem' })
   expect(prepare).toBeEnabled()
   fireEvent.click(prepare)
   await waitFor(() => expect(document.querySelector('.campaign-delivery-preview')).toHaveTextContent('12'))
@@ -50,4 +50,7 @@ it('prepara a audiência e só envia depois da confirmação explícita', async 
   await waitFor(() => expect(mocks.delivery).toHaveBeenCalledTimes(2))
   expect(mocks.delivery.mock.calls[1][0]).toMatchObject({ action: 'confirm', confirm: true, attemptId: 'attempt-campaign' })
   expect(await screen.findByText(/Buttondown aceitou o envio para 12 contatos/)).toBeInTheDocument()
+  const result = screen.getByRole('status')
+  expect(result).toHaveClass('campaign-feedback-success')
+  expect(result).toHaveTextContent('A aceitação não confirma a entrega na caixa postal.')
 })
