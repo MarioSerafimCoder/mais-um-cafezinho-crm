@@ -1,121 +1,97 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Copy, ExternalLink, FilePlus2, PenLine, ChevronLeft, ChevronRight } from 'lucide-react'
 import { api } from '../lib/api'
 import { demoCampaigns } from '../data/templates'
 import { downloadDraftBackup, readDrafts, writeDraft } from '../lib/storage'
-import type { Campaign } from '../types'
-import { Button, DemoNotice, EmptyState, ErrorState, LoadingState, PageTitle, StatusPill } from '../components/ui'
+import { normalizeCampaigns, type DraftSummary, type EditorialCampaign } from '../lib/campaigns'
+import type { Campaign, DraftRecord } from '../types'
+import { Button, DemoNotice, EmptyState, ErrorState, PageTitle, StatusPill } from '../components/ui'
 
-function localCampaigns(): Campaign[] {
-  return readDrafts().map((draft) => ({ id: draft.id, subject: draft.subject || 'Sem assunto', description: draft.description, template: draft.buttondownTemplate, status: 'draft', creation_date: draft.updatedAt, body: draft.content, buttondownId: draft.buttondownId, demo: false, origin: 'local' }))
-}
-
-function campaignDateLabel(date?: string | null, includeTime = false) {
-  if (!date) return 'data não informada'
-  const value = new Date(date)
-  if (Number.isNaN(value.valueOf())) return 'data não informada'
-  return new Intl.DateTimeFormat('pt-BR', includeTime
-    ? { dateStyle: 'short', timeStyle: 'short' }
-    : { dateStyle: 'short' }).format(value)
-}
-
-function timestampNow() {
-  return new Date().toISOString()
-}
+const timestampNow = () => new Date().toISOString()
 
 export function CampaignsPage() {
-  const [campaigns, setCampaigns] = useState<Campaign[]>([])
+  const [local, setLocal] = useState<DraftRecord[]>([])
+  const [cloud, setCloud] = useState<DraftSummary[]>([])
+  const [remote, setRemote] = useState<Campaign[]>([])
   const [demo, setDemo] = useState(false)
-  const [page, setPage] = useState(1)
-  const [remoteCount, setRemoteCount] = useState<number | null>(null)
-  const [hasNext, setHasNext] = useState(false)
-  const [loadedKey, setLoadedKey] = useState('')
   const [error, setError] = useState('')
+  const [cloudError, setCloudError] = useState('')
+  const [remoteError, setRemoteError] = useState('')
+  const [cloudBusy, setCloudBusy] = useState(false)
+  const [remoteBusy, setRemoteBusy] = useState(false)
   const [reload, setReload] = useState(0)
-  const [cloudNext, setCloudNext] = useState<number | null>(null)
-
-  const merge = (first: Campaign[], second: Campaign[]) => [...first, ...second.filter((item) => !first.some((draft) => draft.id === item.id || draft.buttondownId === item.id || (item.buttondownId && draft.buttondownId === item.buttondownId)))]
-  const cloudCampaigns = (items: Awaited<ReturnType<typeof api.cloudDrafts>>['results']): Campaign[] => items.map((item) => ({ ...item, status: 'draft', creation_date: item.updatedAt, origin: 'cloud' }))
+  const [cursor, setCursor] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+  const [hasNext, setHasNext] = useState(false)
+  const generation = useRef(0)
+  const cloudLock = useRef(false)
+  const remoteLock = useRef(false)
+  const merge = <T extends { id: string }>(current: T[], incoming: T[]) => [...new Map([...current, ...incoming].map(item => [item.id, item])).values()]
 
   useEffect(() => {
-    let active = true
-    const requestKey = `${page}:${reload}`
-    let locals: Campaign[] = []
-    void Promise.resolve().then(async () => {
-      locals = localCampaigns()
-      if (!active) return
-      setCampaigns(locals)
-      const status = await api.status()
-      if (status.cloud) {
-        try {
-          const cloud = await api.cloudDrafts()
-          if (!active) return
-          locals = merge(locals, cloudCampaigns(cloud.results)); setCampaigns(locals); setCloudNext(cloud.next)
-        } catch { if (active) setError('Não foi possível listar a nuvem. Os rascunhos deste navegador continuam disponíveis.') }
-      }
-      if (status.connected) {
-        const remote = await api.campaigns(page)
-        if (!active) return
-        setCampaigns(merge(locals, remote.results))
-        setRemoteCount(remote.count)
-        setHasNext(Boolean(remote.next))
-        setDemo(false)
-      } else if (status.demo) {
-        if (!active) return
-        setCampaigns([...locals, ...demoCampaigns])
-        setRemoteCount(0)
-        setHasNext(false)
-        setDemo(true)
-      } else throw new Error(status.reason || 'A Buttondown está desconectada. Seus rascunhos locais continuam disponíveis.')
-    }).catch((cause: unknown) => {
-      if (active) setError(cause instanceof Error ? cause.message : 'Não foi possível carregar as campanhas.')
-    }).finally(() => {
-      if (active) setLoadedKey(requestKey)
-    })
-    return () => { active = false }
-  }, [page, reload])
+    const request = ++generation.current
+    const active = () => request === generation.current
+    const locals = () => { try { setLocal(readDrafts()) } catch (cause) { setError(String(cause)) } }
+    void Promise.resolve().then(locals)
+    window.addEventListener('storage', locals)
+    void Promise.resolve().then(() => { setCloudBusy(true); setRemoteBusy(true); setCloudError(''); setRemoteError('') })
+    // Each source completes independently, including when status discovery fails.
+    void api.cloudDrafts().then(data => { if (active()) { setCloud(data.results); setCursor(data.next) } })
+      .catch(() => { if (active()) setCloudError('Não foi possível atualizar os rascunhos entre dispositivos.') })
+      .finally(() => { if (active()) setCloudBusy(false) })
+    void api.status().then(async status => {
+      if (!active()) return
+      setDemo(status.demo)
+      if (status.demo && !status.connected) { setRemote(demoCampaigns); setHasNext(false); return }
+      if (!status.connected) throw new Error('A consulta à plataforma está indisponível. As edições recuperadas continuam acessíveis.')
+      const data = await api.campaigns()
+      if (active()) { setRemote(data.results); setPage(1); setHasNext(Boolean(data.next)) }
+    }).catch(cause => { if (active()) setRemoteError(String(cause instanceof Error ? cause.message : cause)) })
+      .finally(() => { if (active()) setRemoteBusy(false) })
+    return () => { generation.current = request + 1; window.removeEventListener('storage', locals) }
+  }, [reload])
 
-  const loading = loadedKey !== `${page}:${reload}`
-  const visibleError = loading ? '' : error
-
-  const duplicate = (campaign: Campaign) => {
-    if (!campaign.body) return
-    try {
-      const original = readDrafts().find((item) => item.id === campaign.id)
-      writeDraft({ id: `local-${crypto.randomUUID()}`, subject: `${campaign.subject} — cópia`, description: campaign.description || original?.description, buttondownTemplate: campaign.template === 'classic' || campaign.template === 'modern' ? campaign.template : original?.buttondownTemplate, editionDate: original?.editionDate, content: campaign.body, document: original?.document ? structuredClone(original.document) : undefined, schemaVersion: original?.document ? 2 : undefined, templateId: original?.templateId || null, status: 'draft', revision: 0, updatedAt: timestampNow() })
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível duplicar sem perder conteúdo.'); return }
-    setReload((value) => value + 1)
+  const more = async () => {
+    const request = generation.current
+    const tasks: Promise<void>[] = []
+    if (cursor && !cloudLock.current) {
+      cloudLock.current = true; setCloudBusy(true); setCloudError('')
+      tasks.push(api.cloudDrafts(cursor).then(data => { if (request === generation.current) { setCloud(current => merge(current, data.results)); setCursor(data.next) } }).catch(() => setCloudError('Não foi possível carregar mais edições. Tente novamente.')).finally(() => { cloudLock.current = false; setCloudBusy(false) }))
+    }
+    if (hasNext && !remoteLock.current) {
+      remoteLock.current = true; setRemoteBusy(true); setRemoteError('')
+      tasks.push(api.campaigns(page + 1).then(data => { if (request === generation.current) { setRemote(current => merge(current, data.results)); setPage(page + 1); setHasNext(Boolean(data.next)) } }).catch(() => setRemoteError('Não foi possível carregar mais campanhas. Tente novamente.')).finally(() => { remoteLock.current = false; setRemoteBusy(false) }))
+    }
+    await Promise.allSettled(tasks)
   }
-
-  const sent = campaigns.filter((item) => item.status === 'sent')
-  const drafts = campaigns.filter((item) => item.status === 'draft')
-  const scheduled = campaigns.filter((item) => item.status === 'scheduled' || item.status === 'about_to_send' || item.status === 'in_flight')
-
+  const duplicate = async (campaign: EditorialCampaign) => {
+    try {
+      const source = campaign.draft || (cloud.some(d => d.id === campaign.editorId) ? await api.cloudDraft(campaign.editorId!) : undefined)
+      const external = source ? undefined : await api.campaign(campaign.editorId!)
+      writeDraft({ id: 'local-' + crypto.randomUUID(), subject: campaign.subject + ' — cópia', content: source?.content || external?.body || '', document: source?.document, schemaVersion: source?.schemaVersion, description: source?.description || external?.description, buttondownTemplate: source?.buttondownTemplate, editionDate: source?.editionDate, templateId: source?.templateId || null, status: 'draft', revision: 0, updatedAt: timestampNow() })
+      setLocal(readDrafts())
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível duplicar a edição.') }
+  }
+  const campaigns = normalizeCampaigns(local, cloud, remote)
+  const loading = cloudBusy || remoteBusy
   return <>
-    <PageTitle eyebrow="ARQUIVO DE EDIÇÕES" title="Campanhas" description="Rascunhos, envios e histórias que já foram para a rua." action={<Link to="/editor/new"><Button icon={<FilePlus2 size={16} />}>Nova campanha</Button></Link>} />
+    <PageTitle eyebrow="ARQUIVO DE EDIÇÕES" title="Campanhas" description="Suas edições, da primeira ideia à publicação." action={<Link to="/editor/new"><Button>Nova campanha</Button></Link>} />
     <details className="recovery-import"><summary>Recuperar um backup</summary><p>Importe JSON do editor ou de um backup local. Os rascunhos entram como cópias novas, sem substituir edições ou vínculos da Buttondown.</p><input aria-label="Importar cópias de recuperação" type="file" accept="application/json,.json" onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; if (file.size > 5_000_000) { setError('O backup excede o limite de 5 MB.'); return } void file.text().then(async (text) => { const { importRecoveryCopies } = await import('../lib/recovery'); importRecoveryCopies(text); setError(''); setReload((value) => value + 1) }).catch((cause) => setError(cause instanceof Error ? cause.message : 'Falha ao importar backup.')) }} /></details>
+
     {demo && <DemoNotice />}
-    {visibleError && <><ErrorState message={visibleError} onRetry={() => { setError(''); setReload((value) => value + 1) }} /><Button variant="outline" size="sm" onClick={downloadDraftBackup}>Exportar backup dos rascunhos locais</Button></>}
-    {loading && <LoadingState label="Carregando campanhas…" />}
-    {!loading && !error && campaigns.length === 0 && <EmptyState title="Ainda não há campanhas." description="Todo arquivo começa com uma primeira página. Escolha um template e comece a escrever." action={<Link to="/templates"><Button>Escolher template</Button></Link>} />}
-    {!loading && campaigns.length > 0 && <div className="campaigns-wrap">
-      <div className="campaign-summary"><span>Nesta página e neste navegador:</span><span><strong>{drafts.length}</strong> rascunhos</span><span><strong>{scheduled.length}</strong> agendadas</span><span><strong>{sent.length}</strong> publicadas</span></div>
-      <div className="campaign-list">
-        {campaigns.map((campaign) => {
-          const editable = campaign.status === 'draft'
-          const destination = editable && !campaign.demo ? `/editor/${encodeURIComponent(campaign.id)}` : undefined
-          return <article className="campaign-row" key={campaign.id}>
-            <div className="campaign-stamp">{campaign.status === 'sent' ? '↗' : campaign.status === 'scheduled' ? '◷' : '✎'}</div>
-            <div className="campaign-info"><div className="campaign-title-line"><strong>{campaign.subject || 'Sem assunto'}</strong>{campaign.demo && <span className="faint-label">AMOSTRA</span>}</div><span>{campaign.status === 'sent' ? `Enviada em ${campaignDateLabel(campaign.publish_date)}` : campaign.status === 'scheduled' ? `Agendada para ${campaignDateLabel(campaign.publish_date, true)}` : `Salva em ${campaign.creation_date ? campaignDateLabel(campaign.creation_date) : 'rascunho local'}`}</span></div>
-            <StatusPill tone={campaign.status === 'sent' ? 'success' : campaign.status === 'draft' ? 'neutral' : 'warning'}>{campaign.origin === 'local' ? 'Neste navegador' : campaign.origin === 'cloud' ? 'Nuvem editorial' : campaign.status === 'sent' ? 'Publicada' : campaign.status === 'draft' ? 'Rascunho Buttondown' : campaign.status === 'scheduled' ? 'Agendada' : campaign.status}</StatusPill>
-            <div className="campaign-actions">{editable && destination && <Link className="icon-button" to={destination} aria-label={`Editar ${campaign.subject}`}><PenLine size={16} /></Link>}{campaign.body && <button className="icon-button" aria-label={`Duplicar ${campaign.subject}`} title="Duplicar para rascunho local" onClick={() => duplicate(campaign)}><Copy size={15} /></button>}{campaign.absolute_url && <a className="icon-button" href={campaign.absolute_url} target="_blank" rel="noreferrer" aria-label="Abrir edição publicada"><ExternalLink size={15} /></a>}</div>
-          </article>
-        })}
+    {[error, cloudError, remoteError].filter(Boolean).map(message => <ErrorState key={message} message={message} onRetry={() => { setError(''); setReload(value => value + 1) }} />)}
+    {error && <Button variant="outline" onClick={downloadDraftBackup}>Exportar backup dos rascunhos locais</Button>}
+    {loading && <p role="status">Atualizando edições…</p>}
+    {!loading && !campaigns.length && <EmptyState title="Ainda não há campanhas." description="Comece uma nova edição para escrever." />}
+    <div className="campaign-list">{campaigns.map(campaign => <article className="campaign-row" key={campaign.id}>
+      <div className="campaign-info"><strong>{campaign.subject}</strong><span>Última atualização: {campaign.updatedAt ? new Date(campaign.updatedAt).toLocaleString('pt-BR') : 'não informada'}</span></div>
+      <StatusPill tone={campaign.status === 'sent' ? 'success' : 'neutral'}>{campaign.editorialState}</StatusPill>
+      <div className="campaign-actions">
+        {campaign.status === 'draft' && !campaign.demo && <Link to={'/editor/' + encodeURIComponent(campaign.editorId!)}>{campaign.editorialState === 'Rascunho preparado' ? 'Revisar edição' : 'Continuar edição'}</Link>}
+        {campaign.status !== 'draft' && campaign.absolute_url && <a href={campaign.absolute_url} target="_blank" rel="noreferrer">Visualizar publicação</a>}
+        {!campaign.demo && <Button size="sm" variant="quiet" onClick={() => void duplicate(campaign)}>Duplicar</Button>}
       </div>
-      {!demo && ((remoteCount || 0) > 0 || hasNext || page > 1) && <div className="table-pagination campaign-pagination"><span>Página {page} · {remoteCount?.toLocaleString('pt-BR') ?? 'total não informado'} campanhas na Buttondown</span><div><button className="icon-button" aria-label="Página anterior" disabled={page <= 1 || loading} onClick={() => setPage((value) => Math.max(1, value - 1))}><ChevronLeft size={17} /></button><span className="page-indicator">{page}</span><button className="icon-button" aria-label="Próxima página" disabled={!hasNext || loading} onClick={() => setPage((value) => value + 1)}><ChevronRight size={17} /></button></div></div>}
-      {cloudNext && <Button variant="outline" size="sm" onClick={() => { void api.cloudDrafts(cloudNext).then((data) => { setCampaigns((current) => merge(current, cloudCampaigns(data.results))); setCloudNext(data.next) }).catch(() => setError('Não foi possível carregar a próxima página da nuvem.')) }}>Mais rascunhos da nuvem</Button>}
-      <div className="production-note"><span className="note-mark">i</span><p>Este painel prepara e salva rascunhos. Publicação e envio para assinantes reais ficam desativados nesta versão.</p></div>
-    </div>}
+    </article>)}</div>
+    {(cursor || hasNext) && <Button variant="outline" disabled={loading} onClick={() => void more()}>Carregar mais edições</Button>}
   </>
 }

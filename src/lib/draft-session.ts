@@ -5,7 +5,7 @@ import { validateDraftPayload } from './email'
 import { readDrafts, writeDraft } from './storage'
 
 export type SaveState = 'alterado' | 'salvando' | 'salvo' | 'erro'
-type SyncPayload = { id?: string; subject: string; body: string; description?: string; buttondownTemplate?: 'classic' | 'modern'; createKey?: string }
+type SyncPayload = { id?: string; subject: string; body: string; description?: string; buttondownTemplate?: 'classic' | 'modern'; createKey?: string; expectedBodyHash?: string }
 
 async function bodyHash(body: string) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body))
@@ -78,14 +78,14 @@ export class DraftSession {
         pending = { key: snapshot.createKey || `crm-${snapshot.id}`, subject: payload.subject, body: payload.body, description: snapshot.description || '', template: snapshot.buttondownTemplate || 'classic', revision: snapshot.revision || 0 }
       }
       if (!snapshot.buttondownId) {
-        this.value = { ...this.value, createKey: pending.key, pendingCreate: pending }
+        this.value = { ...this.value, createKey: pending.key, pendingCreate: pending, cloudSavedRevision: undefined }
         this.save() // Retrying an uncertain creation must resend exactly the same payload/key.
         if (beforeCreate) await beforeCreate()
       }
-      const response = await send({ id: snapshot.buttondownId, subject: pending.subject, body: pending.body, description: pending.description, buttondownTemplate: pending.template, createKey: pending.key })
+      const response = await send({ id: snapshot.buttondownId, subject: pending.subject, body: pending.body, description: pending.description, buttondownTemplate: pending.template, createKey: pending.key, expectedBodyHash: snapshot.syncedBodyHash })
       if (!response.id) throw new Error('A Buttondown não retornou o identificador do rascunho.')
       const syncedBodyHash = await bodyHash(typeof response.body === 'string' ? response.body : pending.body)
-      this.value = { ...this.value, buttondownId: response.id, lastSyncedAt: new Date().toISOString(), syncedRevision: pending.revision, syncedBodyHash, pendingCreate: undefined }
+      this.value = { ...this.value, buttondownId: response.id, lastSyncedAt: new Date().toISOString(), syncedRevision: pending.revision, syncedBodyHash, pendingCreate: undefined, cloudSavedRevision: undefined }
       this.save()
       return response
     } finally { this.syncing = false; this.emit() }

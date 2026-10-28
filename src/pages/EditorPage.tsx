@@ -14,9 +14,10 @@ import { CampaignDelivery } from '../components/CampaignDelivery'
 import { DeliveryPreparation } from '../components/DeliveryPreparation'
 import { downloadDraftBackup, readDrafts, readSettings, writeDraft } from '../lib/storage'
 import { DraftSession } from '../lib/draft-session'
+import { DraftPersistence } from '../lib/draft-persistence'
 import { isEditorDocument, isSafeEmailBody, safeUrl } from '../../shared/safety'
 import type { DraftRecord, IntegrationStatus, NewsletterTemplateId } from '../types'
-import { Button, ErrorState, Field, LoadingState, StatusPill } from '../components/ui'
+import { Button, ErrorState, Field, LoadingState } from '../components/ui'
 import { assertDocumentSupported, blockAction, currentBlock, documentBlocks, replaceTemplate } from '../lib/editor-blocks'
 
 type Editor = NonNullable<EmailEditorRef['editor']>
@@ -40,6 +41,9 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
   const navigate = useNavigate()
   const ref = useRef<EmailEditorRef | null>(null)
   const sessionRef = useRef<DraftSession | null>(null)
+  const [coordinator, setCoordinator] = useState<DraftPersistence | null>(null)
+  const persistence = useRef<DraftPersistence | null>(null)
+  const htmlExporter = useRef<() => Promise<string>>(async () => '')
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const previewRequest = useRef(0)
   const previewSelection = useRef<{ from: number; to: number } | null>(null)
@@ -99,7 +103,12 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
         if (status.cloud) {
           try {
             const remote = await api.cloudDraft(local.id)
-            if (active && (remote.cloudRevision || 0) > (local.cloudRevision || 0)) setRemoteCopy(remote)
+            if (active && (remote.cloudRevision || 0) > (local.cloudRevision || 0)) {
+              const current = sessionRef.current
+              if (current && !current.dirty && local.cloudSavedRevision === (local.revision || 0) && current.value.revision === local.revision) {
+                writeDraft(remote, current.value); owned = install(remote)
+              } else setRemoteCopy(remote)
+            }
           } catch (cause) { if (active && !(cause instanceof ApiError && cause.status === 404)) setError('A cópia local está disponível, mas não foi possível conferir a versão na nuvem.') }
         }
         return
@@ -115,7 +124,7 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
       owned = install({ id: `bd-${campaign.id}`, buttondownId: campaign.id, subject: campaign.subject || '', description: campaign.description || '', buttondownTemplate: campaign.template === 'classic' || campaign.template === 'modern' ? campaign.template : 'modern', editionDate: campaignDate(campaign.publish_date || campaign.creation_date), content: extractEmailBody(campaign.body || ''), templateId: null, status: 'draft', updatedAt: new Date().toISOString(), revision: 0 })
     }).catch((cause: unknown) => {
       if (!active) return
-      if (local) { setIntegration({ configured: false, connected: false, demo: false }); setError('Sem conexão. Continue editando: o salvamento neste navegador permanece disponível.') }
+      if (local) { setError('Sem conexão. Continue editando: o salvamento neste navegador permanece disponível.') }
       else setLoadError(cause instanceof Error ? cause.message : 'Não foi possível abrir o rascunho.')
     })
     })
@@ -145,6 +154,7 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
   }, [capture])
 
   const schedule = useCallback(() => {
+    if (persistence.current) { persistence.current.schedule(); return }
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => { try { saveLocal() } catch (cause) { setError(cause instanceof Error ? cause.message : 'Falha no salvamento local.') } }, 600)
   }, [saveLocal])
@@ -203,19 +213,32 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
     finally { if (request === previewRequest.current) setPreviewBusy(false) }
   }
 
+  useEffect(() => { htmlExporter.current = exportHtml })
+  const editorReady = Boolean(editor)
+  useEffect(() => {
+    if (!session || !editorReady) return
+    const coordinator = new DraftPersistence(session, () => htmlExporter.current())
+    coordinator.onChange = refresh
+    persistence.current = coordinator
+    void Promise.resolve().then(() => setCoordinator(coordinator))
+    const online = () => { void coordinator.reconnect() }
+    window.addEventListener('online', online)
+    return () => { coordinator.dispose(); persistence.current = null; window.removeEventListener('online', online) }
+  }, [session, editorReady])
+  useEffect(() => { if (integration) persistence.current?.configure(integration) }, [integration, session, editorReady])
+
   const sync = async () => {
-    if (!session || !integration?.connected || !integration.cloud || session.syncing || session.cloudSaving) return
+    if (!persistence.current) return
     setError(''); setNotice('')
     try {
       saveLocal()
-      const result = await session.sync(exportHtml, api.saveDraft, () => session.saveCloud(api.saveCloudDraft))
-      if (!result) return
-      await session.saveCloud(api.saveCloudDraft)
-      const fullySynced = session.value.revision === session.value.syncedRevision && session.value.revision === session.value.cloudSavedRevision
-      setNotice(fullySynced
-        ? 'Rascunho salvo no D1 e sincronizado com a Buttondown. Nenhum e-mail foi enviado.'
-        : 'A cópia atual foi salva no D1, mas há alterações que ainda precisam ser sincronizadas com a Buttondown. Clique em Salvar e sincronizar novamente.')
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Falha ao sincronizar; o rascunho local foi preservado.') }
+      await persistence.current.flush(true)
+      const current = sessionRef.current?.value
+      setNotice(current?.syncedRevision === current?.revision
+        ? 'Edição preparada. Nenhum e-mail foi enviado.'
+        : 'A versão anterior foi preparada. As alterações mais recentes estão sendo salvas.')
+      await openPreview()
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível preparar a edição.') }
   }
 
   const uploadImage = useCallback(async (file: File) => {
@@ -230,8 +253,8 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
   const draft = session.value
   const selected = editor ? currentBlock(editor) : null
   const outline = editor ? documentBlocks(editor) : []
-  const saveLabel = session.state === 'alterado' ? 'Alterado · aguardando salvamento' : session.state === 'salvando' ? 'Salvando neste navegador…' : session.state === 'erro' ? 'Erro ao salvar · conteúdo preservado em memória' : `Salvo neste navegador · ${dateLabel(draft.updatedAt)}`
-  const busy = session.syncing || session.cloudSaving
+  const saveLabel = coordinator?.label || (session.state === 'erro' ? 'Não foi possível salvar — intervenção necessária.' : 'Salvando…')
+  const busy = session.syncing || session.cloudSaving || Boolean(coordinator?.busy)
 
   const run = (action: () => void | Promise<void>) => { setNotice(''); setError(''); void Promise.resolve().then(action).catch((cause) => setError(cause instanceof Error ? cause.message : 'Não foi possível concluir a ação.')) }
   const insert = (kind: string) => {
@@ -243,39 +266,39 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
 
   return <div className="editor-page">
     <div className="editor-topline"><Link className="back-link" to="/campaigns"><ArrowLeft size={15} /> Campanhas</Link><span className="editor-save-state" data-state={session.state} role="status">{saveLabel}</span></div>
-    <div className="editor-heading"><div><p className="eyebrow">CADERNO DE EDIÇÃO · {draft.buttondownId ? 'BUTTONDOWN' : 'RASCUNHO'}</p><input className="subject-input" value={draft.subject} onChange={(event) => { session.edit({ subject: event.target.value }); schedule() }} aria-label="Assunto da newsletter" /><span className="editor-caption">Buttondown: {dateLabel(draft.lastSyncedAt)} · D1: {dateLabel(draft.lastCloudSavedAt)}</span></div><div className="editor-heading-actions"><Button className="editor-save-sync-button" icon={<span className="editor-save-sync-icon"><Save size={15} /><UploadCloud size={14} /></span>} onClick={() => void sync()} disabled={busy || !integration?.connected || !integration.cloud}>{busy ? 'Salvando e sincronizando…' : 'Salvar e sincronizar'}</Button></div></div>
-    {(!integration?.connected || !integration.cloud) && <p className="editor-demo-note">{!integration?.connected ? integration?.demo ? 'Demonstração identificada. A sincronização com Buttondown e D1 não está disponível.' : integration?.reason || 'Sem conexão confirmada com a Buttondown. O conteúdo continua salvo neste navegador.' : 'Banco editorial D1 indisponível. Conecte o banco no servidor para salvar e sincronizar.'}</p>}
-    {(error || session.error) && <div className="editor-inline-error" role="alert">{error || session.error}<button onClick={() => { setError(''); session.clearError() }} aria-label="Fechar aviso">×</button></div>}
+    <div className="editor-heading"><div><p className="eyebrow">CADERNO DE EDIÇÃO</p><input className="subject-input" value={draft.subject} onChange={(event) => { session.edit({ subject: event.target.value }); schedule() }} aria-label="Assunto da newsletter" /></div><div className="editor-heading-actions"><Button className="editor-save-sync-button" icon={<span className="editor-save-sync-icon"><Save size={15} /><UploadCloud size={14} /></span>} onClick={() => void sync()} disabled={busy || !integration?.connected}>{busy ? 'Salvando…' : 'Preparar edição'}</Button></div></div>
+    {(!integration?.connected || !integration.cloud) && <p className="editor-demo-note">{!integration?.connected ? integration?.demo ? 'Demonstração identificada. A sincronização com Buttondown e D1 não está disponível.' : integration?.reason || 'Sem conexão confirmada com a Buttondown. O conteúdo continua salvo neste navegador.' : 'A recuperação entre dispositivos está indisponível. O conteúdo será salvo neste dispositivo.'}</p>}
+    {(error || session.error || coordinator?.error) && <div className="editor-inline-error" role="alert">{error || session.error || coordinator?.error}<button onClick={() => { setError(''); session.clearError() }} aria-label="Fechar aviso">×</button></div>}
     {notice && <div className="editor-inline-success" role="status">{notice}</div>}
     {remoteCopy && <div className="editor-demo-note"><span>Há uma versão mais recente na nuvem. Sua cópia local está preservada.</span><Button size="sm" onClick={() => run(() => { downloadRecord(session.value); const remote = { ...remoteCopy, revision: Math.max(draft.revision || 0, remoteCopy.revision || 0) + 1 }; writeDraft(remote, readDrafts().find((item) => item.id === remote.id) || null); install(remote); setRemoteCopy(null) })}>Exportar esta cópia e abrir a versão da nuvem</Button></div>}
     <div className="editor-workbench">
       <section className="editor-center">
         <div className="editor-toolbar"><label className="insert-menu">Inserir bloco <select aria-label="Inserir bloco" value="" disabled={preview} onChange={(event) => insert(event.target.value)}><option value="">Escolher…</option><optgroup label="Texto"><option value="paragraph">Parágrafo</option><option value="heading">Título de seção</option><option value="quote">Citação</option></optgroup><optgroup label="Mídia e links"><option value="image">Imagem</option><option value="button">Botão</option></optgroup><optgroup label="Estrutura"><option value="divider">Divisória</option></optgroup></select></label><div className="toolbar-history toolbar-group"><button className="icon-button" aria-label="Desfazer" disabled={preview} onClick={() => editor?.chain().focus().undo().run()}><Undo2 size={16} /></button><button className="icon-button" aria-label="Refazer" disabled={preview} onClick={() => editor?.chain().focus().redo().run()}><Redo2 size={16} /></button></div></div>
         <div className={`editor-canvas${preview ? ' is-preview' : ''}`}><div className="canvas-ruler"><span>{preview ? 'PRÉVIA DO HTML EXPORTADO' : 'EDIÇÃO EM CURSO'}</span><div className="canvas-view-actions"><button className={!preview ? 'selected' : ''} onClick={() => { previewRequest.current++; setPreviewBusy(false); setPreview(false); requestAnimationFrame(() => { if (editor && previewSelection.current) editor.chain().focus().setTextSelection(previewSelection.current).run(); else editor?.commands.focus() }) }}>Escrever</button><button className={preview ? 'selected' : ''} onClick={() => void openPreview()} disabled={previewBusy}>{previewBusy ? 'Gerando…' : 'Prévia'}</button></div></div>
-          {preview && <><p>Revisão local {draft.revision || 0} · sincronizada {draft.syncedRevision ?? "nenhuma"} · D1 {draft.cloudRevision ?? "não salvo"}</p>{contentQuality(html).map(warning => <p role="status" key={warning}>{warning}</p>)}<label>Fonte da prévia<select aria-label="Fonte da prévia" value={previewKind} onChange={e => setPreviewKind(e.target.value as 'original' | 'compatible')}><option value="original">HTML original exportado</option><option value="compatible">Fragmento compatível enviado à Buttondown</option></select></label><p>Prévia simulada do HTML do CRM. A moldura {draft.buttondownTemplate === 'modern' ? 'Modern usa o masthead e a data da Buttondown; o CRM omite o cabeçalho próprio para evitar repetição' : 'Classic usa o cabeçalho editorial do CRM'}; o rodapé de descadastro é processado pela Buttondown fora desta tela. Modern também pode exibir seu preâmbulo em inglês. Gmail e Outlook podem alterar fontes, espaçamento e responsividade; esta simulação não substitui testes nesses clientes.</p>{draft.buttondownId ? <a href={`https://buttondown.com/emails/${encodeURIComponent(draft.buttondownId)}`} target="_blank" rel="noopener noreferrer">Conferir resultado processado na Buttondown (última sincronização)</a> : <p>Resultado processado indisponível: este documento ainda não foi sincronizado.</p>}<div className={`email-preview-frame ${device}`}><iframe title="Prévia da newsletter" sandbox="" referrerPolicy="no-referrer" srcDoc={previewKind === 'original' ? html : compatibleEmailBody(html)} /></div><div className="preview-device-controls"><button onClick={() => setDevice('desktop')}><Monitor size={14} />Desktop</button><button onClick={() => setDevice('mobile')}><Smartphone size={14} />Celular</button></div></>}
+          {preview && <><details><summary>Detalhes da sincronização</summary><p>Revisão local {draft.revision || 0} · sincronizada {draft.syncedRevision ?? "nenhuma"} · nuvem {draft.cloudRevision ?? "não salvo"}</p></details>{contentQuality(html).map(warning => <p role="status" key={warning}>{warning}</p>)}<label>Fonte da prévia<select aria-label="Fonte da prévia" value={previewKind} onChange={e => setPreviewKind(e.target.value as 'original' | 'compatible')}><option value="original">HTML original exportado</option><option value="compatible">Fragmento compatível enviado à Buttondown</option></select></label><p>Prévia simulada do HTML do CRM. A moldura {draft.buttondownTemplate === 'modern' ? 'Modern usa o masthead e a data da Buttondown; o CRM omite o cabeçalho próprio para evitar repetição' : 'Classic usa o cabeçalho editorial do CRM'}; o rodapé de descadastro é processado pela Buttondown fora desta tela. Modern também pode exibir seu preâmbulo em inglês. Gmail e Outlook podem alterar fontes, espaçamento e responsividade; esta simulação não substitui testes nesses clientes.</p>{draft.buttondownId ? <a href={`https://buttondown.com/emails/${encodeURIComponent(draft.buttondownId)}`} target="_blank" rel="noopener noreferrer">Conferir resultado processado na Buttondown (última sincronização)</a> : <p>Resultado processado indisponível: este documento ainda não foi sincronizado.</p>}<div className={`email-preview-frame ${device}`}><iframe title="Prévia da newsletter" sandbox="" referrerPolicy="no-referrer" srcDoc={previewKind === 'original' ? html : compatibleEmailBody(html)} /></div><div className="preview-device-controls"><button onClick={() => setDevice('desktop')}><Monitor size={14} />Desktop</button><button onClick={() => setDevice('mobile')}><Smartphone size={14} />Celular</button></div></>}
           <div className="email-editor-container" style={{ display: preview ? 'none' : undefined }}><EmailEditor key={`${initial.id}:${generation}`} ref={attach} onReady={onReady} onUpdate={onUpdate} content={initial.document || initial.content} extensions={extensions} theme="basic" placeholder="Pressione / para inserir um bloco" /></div>
         </div>
         <div className="editor-canvas-footer"><span>Documento editável em JSON · HTML gerado para prévia e Buttondown</span><button className="html-toggle" onClick={() => run(async () => { setHtml(await exportHtml()); setShowHtml((value) => !value) })}>{showHtml ? 'Fechar HTML' : 'Ver HTML'}</button></div>{showHtml && <pre className="html-output">{html}</pre>}
       </section>
       <aside className="editor-inspector"><div className="inspector-title"><div><p className="eyebrow">FERRAMENTAS</p><h2>Composição</h2></div></div>
         <details className="inspector-section"><summary>Templates</summary><Field label="Ponto de partida"><select value={draft.templateId || ''} disabled={preview || busy} onChange={(event) => setReplacement(event.target.value as NewsletterTemplateId)}><option value="" disabled>Importado / sem template</option>{templates.map((item) => <option value={item.id} key={item.id}>{item.number} · {item.name}</option>)}</select></Field><span className="inspector-hint">A troca pede confirmação e pode ser desfeita.</span></details>
-        <section className="inspector-section"><span className="inspector-label">PUBLICAÇÃO</span>
+        <details className="inspector-section"><summary>Configurações da edição</summary>
           <Field label="Texto de prévia (preheader)"><input maxLength={200} value={draft.description || ''} disabled={preview || busy} onChange={(event) => { session.edit({ description: event.target.value }); schedule() }} /></Field>
           <Field label="Data da edição"><input type="date" value={draft.editionDate || ''} disabled={preview || busy} onChange={(event) => { session.edit({ editionDate: event.target.value }); schedule() }} /></Field>
           <Field label="Template desta edição na Buttondown"><select aria-label="Template desta edição na Buttondown" value={draft.buttondownTemplate || 'classic'} disabled={preview || busy} onChange={(event) => { session.edit({ buttondownTemplate: event.target.value as 'classic' | 'modern' }); schedule() }}><option value="classic">Classic · conteúdo em primeiro plano (recomendado)</option><option value="modern">Modern · masthead e identidade Buttondown</option></select></Field>
           <span className="inspector-hint">A escolha é enviada somente neste rascunho. Classic mantém o conteúdo editorial à frente; Modern acrescenta masthead, assunto, data e um preâmbulo em inglês. A moldura do CRM se ajusta para evitar repetir marca e cabeçalho.</span>
-        </section>
+        </details>
         <section className="inspector-section"><span className="inspector-label">BLOCO SELECIONADO {selected ? `${selected.index + 1} / ${selected.parent.childCount}` : ''}</span><div className="block-actions">{([['up', 'Subir', ArrowUp], ['down', 'Descer', ArrowDown], ['duplicate', 'Duplicar', Copy], ['delete', 'Excluir bloco', Trash2]] as const).map(([action, label, Icon]) => <button key={action} disabled={preview || !editor} onMouseDown={(event) => event.preventDefault()} onClick={() => editor && blockAction(editor, action)}><Icon size={14} />{label}</button>)}</div>
           {editor && <ol className="block-outline" aria-label="Estrutura da edição">{outline.map((block, index) => <li key={block.position}><button disabled={preview} aria-current={selected?.position === block.position ? 'true' : undefined} onClick={() => editor.chain().focus().setTextSelection(Math.min(block.position + 1, editor.state.doc.content.size)).scrollIntoView().run()}>{index + 1}. {block.label}</button></li>)}</ol>}
         </section>
         {editor && <MediaControls editor={editor} connected={Boolean(integration?.connected)} disabled={preview || busy} upload={uploadImage} onError={setError} />}
-        <CampaignDelivery key={`campaign:${draft.id}:${draft.revision}:${draft.cloudRevision}`} draft={draft} />
-        <DeliveryPreparation key={`test:${draft.id}:${draft.revision}:${draft.cloudRevision}`} draft={draft} />
-        <section className="inspector-section"><span className="inspector-label">RECUPERAÇÃO</span><Button size="sm" variant="outline" onClick={() => downloadRecord({ ...session.value, document: ref.current?.getJSON() || session.value.document })}>Exportar documento</Button><Button size="sm" variant="outline" disabled={!integration?.cloud || busy} onClick={() => run(async () => { saveLocal(); await session.saveCloud(api.saveCloudDraft); setNotice('Cópia do documento salva na nuvem.') })}>Salvar cópia na nuvem</Button><span className="inspector-hint">{integration?.cloud ? `Última cópia na nuvem: ${dateLabel(draft.lastCloudSavedAt)}${draft.lastCloudSavedAt && draft.cloudSavedRevision !== draft.revision ? ' · há alterações posteriores' : ''}` : 'Recuperação entre dispositivos exige o banco editorial configurado. A cópia deste navegador continua disponível.'}</span></section>
+        <details className="inspector-section"><summary>Ferramentas de envio e homologação</summary><CampaignDelivery key={`campaign:${draft.id}:${draft.revision}:${draft.cloudRevision}`} draft={draft} />
+        <DeliveryPreparation key={`test:${draft.id}:${draft.revision}:${draft.cloudRevision}`} draft={draft} /></details>
+        <details className="inspector-section"><summary>Exportação e recuperação</summary><Button size="sm" variant="outline" disabled={!integration?.cloud || busy} onClick={() => run(async () => { setRemoteCopy(await api.cloudDraft(draft.id)) })}>Conferir versão recuperável</Button><Button size="sm" variant="outline" onClick={() => downloadRecord({ ...session.value, document: ref.current?.getJSON() || session.value.document })}>Exportar documento</Button><Button size="sm" variant="outline" disabled={busy} onClick={() => run(async () => { await persistence.current?.reconnect(); await persistence.current?.flush(true) })}>Tentar preparar novamente</Button><span className="inspector-hint">{integration?.cloud ? `Última cópia na nuvem: ${dateLabel(draft.lastCloudSavedAt)}${draft.lastCloudSavedAt && draft.cloudSavedRevision !== draft.revision ? ' · há alterações posteriores' : ''}` : 'Recuperação entre dispositivos exige o banco editorial configurado. A cópia deste navegador continua disponível.'}</span></details>
         <p className="inspector-hint">Envios reais exigem ativação explícita no servidor e permissão de envio na Buttondown. A configuração atual permanece fechada por padrão.</p>
       </aside>
     </div>
-    <div className="editor-bottom-bar"><StatusPill tone={integration?.connected ? 'success' : 'warning'}>{session.syncing ? 'SINCRONIZANDO' : integration?.connected ? 'BUTTONDOWN CONECTADA' : 'SALVAMENTO LOCAL'}</StatusPill><span className="safe-footer-copy">{session.dirty ? 'Há alterações ainda não persistidas.' : 'Cópia local preservada.'}</span></div>
+    <div className="editor-bottom-bar"><span className="safe-footer-copy">Preparar uma edição salva um rascunho para revisão. Nenhum e-mail é enviado automaticamente.</span></div>
     {replacement && <div className="editor-dialog-backdrop"><section role="dialog" aria-modal="true" aria-label="Trocar template" className="editor-dialog"><h2>Trocar o ponto de partida?</h2><p>O conteúdo, assunto e texto de prévia serão substituídos. Desfazer recupera o conteúdo; o backup exportado também conserva o assunto anterior.</p><Button variant="outline" onClick={() => setReplacement(null)}>Cancelar</Button><Button onClick={() => run(() => { if (!editor) return; downloadRecord(session.value); const template = getTemplate(replacement, readSettings()); replaceTemplate(editor, template.content); session.edit({ subject: template.subject, description: template.preheader, buttondownTemplate: template.buttondownTemplate, templateId: template.id }); capture(ref.current!); schedule(); setReplacement(null) })}>Substituir conteúdo e assunto</Button></section></div>}
     {blocker.state === 'blocked' && <div className="editor-dialog-backdrop"><section role="dialog" aria-modal="true" aria-label="Alterações não salvas" className="editor-dialog"><h2>Ainda há alterações sem salvar.</h2><p>Salve neste navegador ou continue a edição antes de sair.</p><Button variant="outline" onClick={() => blocker.reset()}>Continuar editando</Button><Button onClick={() => run(() => { saveLocal(); blocker.proceed() })}>Salvar e sair</Button><Button variant="quiet" onClick={() => blocker.proceed()}>Sair sem salvar</Button></section></div>}
   </div>

@@ -33,8 +33,16 @@ export const onRequestPatch = async ({ request, env, params }: Context) => {
   try {
     const data = draftPayload(await parseJson(request))
     if (!validDraft(data)) return json({ error: 'Apenas alterações em rascunhos são permitidas.' }, 400)
-    const existing = await buttondown({ request, env }, `/emails/${encodeURIComponent(params.id)}`) as { status?: string }
+    const existing = await buttondown({ request, env }, `/emails/${encodeURIComponent(params.id)}`) as { status?: string; body?: string; subject?: string; description?: string; template?: string }
     if (existing.status !== 'draft') return json({ error: 'Este email não é um rascunho e não pode ser alterado por este painel.' }, 409)
+    // Reconcile an acknowledged-by-provider but lost-to-client update before retrying.
+    if (existing.body === data.body && existing.subject === data.subject && (existing.description || '') === (data.description || '') && (!data.template || existing.template === data.template)) return json(existing)
+    const expected = request.headers.get('X-Expected-Body-Hash')
+    if (expected) {
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(existing.body || ''))
+      const actual = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
+      if (actual !== expected) return json({ error: 'O conteúdo mudou na plataforma. As duas versões foram preservadas; confira o rascunho remoto antes de continuar.' }, 409)
+    }
     const result = await buttondown({ request, env }, `/emails/${encodeURIComponent(params.id)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },

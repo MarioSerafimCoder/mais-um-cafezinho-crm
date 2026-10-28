@@ -103,3 +103,16 @@ describe('Buttondown com mocks, sem chamadas externas', () => {
     expect((await upload({ request: req(), env })).status).toBe(403)
   })
 })
+
+it('impede sobrescrita de conteúdo externo modificado após a última sincronização', async () => {
+  mock({ id: 'em_test', status: 'draft', subject: 'Outra aba', body: '<p>Outro conteúdo</p>' })
+  const request = new Request('https://crm.test/api/emails/em_test', { method: 'PATCH', headers: { 'X-Expected-Body-Hash': 'a'.repeat(64) }, body: JSON.stringify({ subject: 'Local', body: '<p>Local</p>', status: 'draft' }) })
+  expect((await patch({ request, env, params: { id: 'em_test' } })).status).toBe(409)
+  expect(fetch).toHaveBeenCalledOnce()
+})
+it('confirma atualização já aplicada após timeout sem repetir PATCH', async () => {
+  mock({ id: 'em_test', status: 'draft', subject: 'Local', body: '<p>Local</p>' })
+  const request = new Request('https://crm.test/api/emails/em_test', { method: 'PATCH', headers: { 'X-Expected-Body-Hash': 'a'.repeat(64) }, body: JSON.stringify({ subject: 'Local', body: '<p>Local</p>', status: 'draft' }) })
+  expect((await patch({ request, env, params: { id: 'em_test' } })).status).toBe(200)
+  expect(fetch).toHaveBeenCalledOnce()
+})

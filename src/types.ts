@@ -58,6 +58,7 @@ export type Campaign = {
   status: string
   creation_date?: string | null
   publish_date?: string | null
+  modification_date?: string | null
   body?: string
   absolute_url?: string | null
   buttondownId?: string

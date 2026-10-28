@@ -4,25 +4,28 @@ test('editor salva no D1, sincroniza e exige confirmação exata antes do teste 
   let sends = 0
   let accepted = false
   let prepared = false
+  let preparedRevision = 0
   await page.route('**/api/status', route => route.fulfill({ json: { configured: true, connected: true, cloud: true, demo: false } }))
   await page.route('**/api/emails', async route => {
     const data = route.request().postDataJSON()
     await route.fulfill({ json: { id: 'em_e2e', ...data } })
   })
   await page.route('**/api/editorial-test*', async route => {
-    if (route.request().method() === 'GET') return route.fulfill({ json: { enabled: true, recipients: ['owner@example.com'], attempts: accepted ? [{ id: 'attempt-e2e', recipient: 'owner@example.com', cloud_revision: 2, state: 'accepted', created_at: new Date().toISOString() }] : prepared ? [{ id: 'attempt-e2e', recipient: 'owner@example.com', cloud_revision: 2, state: 'prepared', created_at: new Date().toISOString() }] : [] } })
+    if (route.request().method() === 'GET') return route.fulfill({ json: { enabled: true, recipients: ['owner@example.com'], attempts: accepted ? [{ id: 'attempt-e2e', recipient: 'owner@example.com', cloud_revision: preparedRevision, state: 'accepted', created_at: new Date().toISOString() }] : prepared ? [{ id: 'attempt-e2e', recipient: 'owner@example.com', cloud_revision: preparedRevision, state: 'prepared', created_at: new Date().toISOString() }] : [] } })
     const data = route.request().postDataJSON()
     if (data.confirm) { sends++; accepted = true; return route.fulfill({ json: { accepted: true } }) }
     prepared = true
+    preparedRevision = data.cloudRevision
     return route.fulfill({ json: { attemptId: 'attempt-e2e', recipient: 'owner@example.com', cloudRevision: data.cloudRevision } })
   })
   await page.goto('/editor/new?template=blog')
   await expect(page.locator('.tiptap')).toBeVisible()
   await page.getByLabel('Assunto da newsletter').fill('HOMOLOGAÇÃO — fluxo CRM')
+  await page.locator('summary').filter({ hasText: 'Ferramentas de envio e homologação' }).evaluate(el => { (el.parentElement as HTMLDetailsElement).open = true })
   await page.getByRole('button', { name: 'Atualizar destinatário e histórico' }).click()
   await expect(page.getByRole('button', { name: 'Preparar novo teste' })).toBeDisabled()
-  await page.getByRole('button', { name: 'Salvar e sincronizar' }).click()
-  await expect(page.getByText('Rascunho salvo no D1 e sincronizado com a Buttondown. Nenhum e-mail foi enviado.')).toBeVisible()
+  await page.getByRole('button', { name: 'Preparar edição' }).click()
+  await expect(page.getByText('Edição preparada. Nenhum e-mail foi enviado.')).toBeVisible()
   const id = page.url().split('/').pop()!
   const saved = await (await request.get(`/api/drafts/${id}`)).json()
   expect(saved.syncedBodyHash).toMatch(/^[a-f0-9]{64}$/)
@@ -34,6 +37,7 @@ test('editor salva no D1, sincroniza e exige confirmação exata antes do teste 
   const send = page.getByRole('button', { name: 'Enviar este teste', exact: true })
   await expect(send).toBeDisabled(); expect(sends).toBe(0)
   await page.reload()
+  await page.getByText('Ferramentas de envio e homologação', { exact: true }).click()
   await page.getByRole('button', { name: 'Atualizar destinatário e histórico' }).click()
   await expect(page.locator('.test-confirmation-card .test-recipient-address')).toHaveText('owner@example.com')
   await expect(page.getByRole('button', { name: 'Enviar este teste', exact: true })).toBeDisabled()
@@ -43,6 +47,7 @@ test('editor salva no D1, sincroniza e exige confirmação exata antes do teste 
   await expect(page.getByLabel('Histórico de testes')).toContainText('recebimento pendente')
   expect(sends).toBe(1)
   await page.reload()
+  await page.getByText('Ferramentas de envio e homologação', { exact: true }).click()
   await page.getByRole('button', { name: 'Atualizar destinatário e histórico' }).click()
   await expect(page.getByLabel('Histórico de testes')).toContainText('Aceito pela Buttondown')
   expect(sends).toBe(1)
