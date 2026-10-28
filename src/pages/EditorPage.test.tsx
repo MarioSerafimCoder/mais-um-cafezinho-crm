@@ -4,8 +4,14 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { EditorPage } from './EditorPage'
 import { readDrafts } from '../lib/storage'
 
-const mocks = vi.hoisted(() => ({ configured: false, save: vi.fn() }))
-vi.mock('../lib/api', () => ({ api: { status: async () => ({ configured: mocks.configured, connected: mocks.configured, demo: !mocks.configured }), campaignDeliveryStatus: async () => ({ enabled: false }), saveDraft: mocks.save } }))
+const mocks = vi.hoisted(() => ({ configured: false, cloud: false, save: vi.fn(), saveCloud: vi.fn() }))
+vi.mock('../lib/api', () => {
+  class MockApiError extends Error {
+    readonly status: number
+    constructor(message: string, status: number) { super(message); this.status = status }
+  }
+  return { ApiError: MockApiError, api: { status: async () => ({ configured: mocks.configured, connected: mocks.configured, demo: !mocks.configured, cloud: mocks.cloud }), cloudDraft: async () => { throw new MockApiError('Não encontrado', 404) }, campaignDeliveryStatus: async () => ({ enabled: false }), saveDraft: mocks.save, saveCloudDraft: mocks.saveCloud } }
+})
 vi.mock('@react-email/editor/extensions', () => ({ StarterKit: { configure: () => ({}) } }))
 vi.mock('@react-email/editor/plugins', () => ({ EmailTheming: { configure: () => ({}) }, useEditorImage: () => ({}) }))
 vi.mock('@react-email/editor', async () => {
@@ -25,7 +31,7 @@ vi.mock('@react-email/editor', async () => {
   }
 })
 
-beforeEach(() => { cleanup(); localStorage.clear(); mocks.configured = false; mocks.save.mockReset() })
+beforeEach(() => { cleanup(); localStorage.clear(); mocks.configured = false; mocks.cloud = false; mocks.save.mockReset(); mocks.saveCloud.mockReset() })
 
 function openEditor() {
   return render(<RouterProvider router={createMemoryRouter([{ path: '/editor/:id', element: <EditorPage /> }], { initialEntries: ['/editor/new'] })} />)
@@ -37,7 +43,6 @@ it('preserva e salva a edição ao entrar e sair da prévia', async () => {
   fireEvent.change(body, { target: { value: '<p>Minha edição preservada.</p>' } })
   fireEvent.click(screen.getByRole('button', { name: 'Prévia' }))
   await screen.findByTitle('Prévia da newsletter')
-  fireEvent.click(screen.getAllByRole('button', { name: 'Salvar local' })[0])
   await waitFor(() => expect(readDrafts()[0]?.document?.content?.[0].content?.[0].text).toContain('Minha edição preservada.'))
   fireEvent.click(screen.getByRole('button', { name: 'Escrever' }))
   expect(screen.getByLabelText('Conteúdo de teste')).toHaveValue('<p>Minha edição preservada.</p>')
@@ -45,15 +50,21 @@ it('preserva e salva a edição ao entrar e sair da prévia', async () => {
 
 it('não restaura o assunto antigo quando uma sincronização termina depois da edição', async () => {
   mocks.configured = true
+  mocks.cloud = true
   let finish!: (value: { id: string }) => void
   mocks.save.mockImplementation(() => new Promise((resolve) => { finish = resolve }))
+  mocks.saveCloud.mockImplementation(async (draft) => ({ ...draft, cloudRevision: (draft.cloudRevision || 0) + 1, lastCloudSavedAt: 'agora' }))
   openEditor()
   const subject = await screen.findByLabelText('Assunto da newsletter')
   fireEvent.change(subject, { target: { value: 'Antes da sincronização' } })
-  fireEvent.click(screen.getAllByRole('button', { name: 'Salvar rascunho na Buttondown' })[0])
+  expect(screen.queryByRole('button', { name: 'Salvar local' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Salvar rascunho na Buttondown' })).not.toBeInTheDocument()
+  fireEvent.click(screen.getAllByRole('button', { name: 'Salvar e sincronizar' })[0])
   await waitFor(() => expect(mocks.save).toHaveBeenCalledOnce())
   fireEvent.change(subject, { target: { value: 'Escrito durante a sincronização' } })
   finish({ id: 'em_test' })
-  await screen.findByText('Rascunho salvo na Buttondown. Nenhum envio foi feito.')
+  await screen.findByText('A cópia atual foi salva no D1, mas há alterações que ainda precisam ser sincronizadas com a Buttondown. Clique em Salvar e sincronizar novamente.')
+  expect(mocks.saveCloud).toHaveBeenCalledTimes(2)
+  expect(mocks.saveCloud).toHaveBeenLastCalledWith(expect.objectContaining({ subject: 'Escrito durante a sincronização', buttondownId: 'em_test' }))
   expect(readDrafts()[0]?.subject).toBe('Escrito durante a sincronização')
 })

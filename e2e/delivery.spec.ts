@@ -21,8 +21,8 @@ test('editor salva no D1, sincroniza e exige confirmação exata antes do teste 
   await page.getByLabel('Assunto da newsletter').fill('HOMOLOGAÇÃO — fluxo CRM')
   await page.getByRole('button', { name: 'Atualizar destinatário e histórico' }).click()
   await expect(page.getByRole('button', { name: 'Preparar novo teste' })).toBeDisabled()
-  await page.getByRole('button', { name: 'Salvar rascunho na Buttondown' }).click()
-  await expect(page.getByText('Rascunho salvo na Buttondown. Nenhum envio foi feito.')).toBeVisible()
+  await page.getByRole('button', { name: 'Salvar e sincronizar' }).click()
+  await expect(page.getByText('Rascunho salvo no D1 e sincronizado com a Buttondown. Nenhum e-mail foi enviado.')).toBeVisible()
   const id = page.url().split('/').pop()!
   const saved = await (await request.get(`/api/drafts/${id}`)).json()
   expect(saved.syncedBodyHash).toMatch(/^[a-f0-9]{64}$/)

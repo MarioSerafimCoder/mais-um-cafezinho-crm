@@ -8,7 +8,7 @@ async function openEditor(page: Page) {
   return page.locator('.tiptap')
 }
 
-test('JSON, prévia, seleção, salvamento manual e recuperação após refresh', async ({ page }) => {
+test('JSON, prévia, seleção, salvamento local automático e recuperação após refresh', async ({ page }) => {
   const body = await openEditor(page)
   await body.fill('Uma frase que não pode sumir.')
   await page.getByLabel('Assunto da newsletter').fill('Rascunho de estabilidade')
@@ -19,7 +19,6 @@ test('JSON, prévia, seleção, salvamento manual e recuperação após refresh'
   await page.getByRole('button', { name: 'Prévia', exact: true }).click()
   await expect(page.frameLocator('iframe[title="Prévia da newsletter"]').getByText('Uma frase que não pode sumir.')).toBeVisible()
   await page.getByRole('button', { name: 'Celular', exact: true }).click()
-  await page.getByRole('button', { name: 'Salvar local', exact: true }).click()
   await page.getByRole('button', { name: 'Escrever', exact: true }).click()
   await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe(selection)
   await expect(body).toContainText('Uma frase que não pode sumir.')
@@ -86,7 +85,7 @@ test('falha de armazenamento avisa ao navegar e não informa sucesso', async ({ 
   const body = await openEditor(page)
   await page.evaluate(() => { Storage.prototype.setItem = () => { throw new DOMException('Quota', 'QuotaExceededError') } })
   await body.fill('Este texto ainda não está persistido')
-  await page.getByRole('button', { name: 'Salvar local', exact: true }).click()
+  await page.getByRole('button', { name: 'Prévia', exact: true }).click()
   await expect(page.getByRole('alert')).toBeVisible()
   await page.getByRole('link', { name: 'Campanhas', exact: true }).last().click()
   await expect(page.getByRole('dialog', { name: 'Alterações não salvas' })).toBeVisible()
@@ -97,7 +96,7 @@ test('falha de armazenamento avisa ao navegar e não informa sucesso', async ({ 
 test('falha de rede não vira demonstração, e o rascunho local abre offline', async ({ page }) => {
   const body = await openEditor(page)
   await body.fill('Recuperação sem rede')
-  await page.getByRole('button', { name: 'Salvar local', exact: true }).click()
+  await page.getByRole('button', { name: 'Prévia', exact: true }).click()
   await page.route('**/api/**', (route) => route.abort())
   await page.reload()
   await expect(page.locator('.tiptap')).toContainText('Recuperação sem rede')
@@ -124,7 +123,20 @@ test('documento estruturado recuperado em um segundo dispositivo pelo D1 local',
 })
 
 test('a resposta de sincronização não sobrescreve a edição em andamento', async ({ page }) => {
-  await page.route('**/api/status', (route) => route.fulfill({ json: { configured: true, connected: true, demo: false, cloud: false } }))
+  await page.route('**/api/status', (route) => route.fulfill({ json: { configured: true, connected: true, demo: false, cloud: true } }))
+  const cloudDrafts = new Map<string, Record<string, unknown>>()
+  await page.route('**/api/drafts/**', async (route) => {
+    const id = new URL(route.request().url()).pathname.split('/').pop()!
+    if (route.request().method() === 'GET') {
+      const saved = cloudDrafts.get(id)
+      return saved ? route.fulfill({ json: saved }) : route.fulfill({ status: 404, json: { error: 'Rascunho não encontrado.' } })
+    }
+    const draft = route.request().postDataJSON() as Record<string, unknown>
+    const cloudRevision = Number(cloudDrafts.get(id)?.cloudRevision || 0) + 1
+    const saved = { ...draft, cloudRevision, cloudSavedRevision: draft.revision, lastCloudSavedAt: new Date().toISOString() }
+    cloudDrafts.set(id, saved)
+    return route.fulfill({ json: saved })
+  })
   let finish!: () => void
   const gate = new Promise<void>((resolve) => { finish = resolve })
   let posted = false
@@ -132,17 +144,18 @@ test('a resposta de sincronização não sobrescreve a edição em andamento', a
   const body = await openEditor(page)
   await body.fill('Texto antes')
   await page.getByLabel('Assunto da newsletter').fill('Assunto antes')
-  await page.getByRole('button', { name: 'Salvar rascunho na Buttondown' }).click()
+  await page.getByRole('button', { name: 'Salvar e sincronizar' }).click()
   await expect.poll(() => posted).toBe(true)
   await body.fill('Texto escrito enquanto sincronizava')
   await page.getByLabel('Assunto da newsletter').fill('Assunto depois')
   finish()
-  await expect(page.getByText('Rascunho salvo na Buttondown. Nenhum envio foi feito.')).toBeVisible()
+  await expect(page.getByText(/A cópia atual foi salva no D1, mas há alterações que ainda precisam ser sincronizadas/)).toBeVisible()
   await expect(body).toContainText('Texto escrito enquanto sincronizava')
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('mais-um-cafezinho:drafts:v1') || '[]')[0])
   expect(saved.subject).toBe('Assunto depois')
   expect(JSON.stringify(saved.document)).toContain('Texto escrito enquanto sincronizava')
   expect(saved.syncedRevision).toBeLessThan(saved.revision)
+  expect(cloudDrafts.get(saved.id)).toMatchObject({ subject: 'Assunto depois', buttondownId: 'em_mock', cloudSavedRevision: saved.revision })
 })
 
 test('aplicação de link mantém a seleção e falha no upload preserva o texto', async ({ page }) => {
@@ -175,7 +188,6 @@ test('editor e templates mantêm espaço de escrita em desktop e mobile', async 
   await page.getByRole('button', { name: 'Prévia', exact: true }).click()
   await page.getByRole('button', { name: 'Celular', exact: true }).click()
   await expect.poll(async () => page.frameLocator('iframe[title="Prévia da newsletter"]').locator('html').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
-  await page.getByRole('button', { name: 'Salvar local', exact: true }).click()
   await page.goto('/templates')
   await expect(page.locator('iframe[title^="Simulação no navegador:"]')).toHaveCount(3)
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)

@@ -204,14 +204,17 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
   }
 
   const sync = async () => {
-    if (!session || !integration?.connected || session.syncing || session.cloudSaving) return
+    if (!session || !integration?.connected || !integration.cloud || session.syncing || session.cloudSaving) return
     setError(''); setNotice('')
     try {
       saveLocal()
-      const result = await session.sync(exportHtml, api.saveDraft, integration.cloud ? () => session.saveCloud(api.saveCloudDraft) : undefined)
+      const result = await session.sync(exportHtml, api.saveDraft, () => session.saveCloud(api.saveCloudDraft))
       if (!result) return
-      if (integration.cloud) await session.saveCloud(api.saveCloudDraft)
-      setNotice('Rascunho salvo na Buttondown. Nenhum envio foi feito.')
+      await session.saveCloud(api.saveCloudDraft)
+      const fullySynced = session.value.revision === session.value.syncedRevision && session.value.revision === session.value.cloudSavedRevision
+      setNotice(fullySynced
+        ? 'Rascunho salvo no D1 e sincronizado com a Buttondown. Nenhum e-mail foi enviado.'
+        : 'A cópia atual foi salva no D1, mas há alterações que ainda precisam ser sincronizadas com a Buttondown. Clique em Salvar e sincronizar novamente.')
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Falha ao sincronizar; o rascunho local foi preservado.') }
   }
 
@@ -240,8 +243,8 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
 
   return <div className="editor-page">
     <div className="editor-topline"><Link className="back-link" to="/campaigns"><ArrowLeft size={15} /> Campanhas</Link><span className="editor-save-state" data-state={session.state} role="status">{saveLabel}</span></div>
-    <div className="editor-heading"><div><p className="eyebrow">CADERNO DE EDIÇÃO · {draft.buttondownId ? 'BUTTONDOWN' : 'RASCUNHO'}</p><input className="subject-input" value={draft.subject} onChange={(event) => { session.edit({ subject: event.target.value }); schedule() }} aria-label="Assunto da newsletter" /><span className="editor-caption">Última sincronização: {dateLabel(draft.lastSyncedAt)}{draft.lastSyncedAt && draft.syncedRevision !== draft.revision ? ' · há alterações posteriores' : ''}</span></div><div className="editor-heading-actions"><Button variant="outline" icon={<Save size={15} />} onClick={() => run(() => { saveLocal(); setNotice('Rascunho salvo neste navegador.') })}>Salvar local</Button><Button icon={<UploadCloud size={15} />} onClick={() => void sync()} disabled={busy || !integration?.connected}>Salvar rascunho na Buttondown</Button></div></div>
-    {!integration?.connected && <p className="editor-demo-note">{integration?.demo ? 'Demonstração identificada. Edição e salvamento local disponíveis.' : integration?.reason || 'Sem conexão confirmada com a Buttondown. Seu texto pode ser editado e salvo neste navegador.'}</p>}
+    <div className="editor-heading"><div><p className="eyebrow">CADERNO DE EDIÇÃO · {draft.buttondownId ? 'BUTTONDOWN' : 'RASCUNHO'}</p><input className="subject-input" value={draft.subject} onChange={(event) => { session.edit({ subject: event.target.value }); schedule() }} aria-label="Assunto da newsletter" /><span className="editor-caption">Buttondown: {dateLabel(draft.lastSyncedAt)} · D1: {dateLabel(draft.lastCloudSavedAt)}</span></div><div className="editor-heading-actions"><Button className="editor-save-sync-button" icon={<span className="editor-save-sync-icon"><Save size={15} /><UploadCloud size={14} /></span>} onClick={() => void sync()} disabled={busy || !integration?.connected || !integration.cloud}>{busy ? 'Salvando e sincronizando…' : 'Salvar e sincronizar'}</Button></div></div>
+    {(!integration?.connected || !integration.cloud) && <p className="editor-demo-note">{!integration?.connected ? integration?.demo ? 'Demonstração identificada. A sincronização com Buttondown e D1 não está disponível.' : integration?.reason || 'Sem conexão confirmada com a Buttondown. O conteúdo continua salvo neste navegador.' : 'Banco editorial D1 indisponível. Conecte o banco no servidor para salvar e sincronizar.'}</p>}
     {(error || session.error) && <div className="editor-inline-error" role="alert">{error || session.error}<button onClick={() => { setError(''); session.clearError() }} aria-label="Fechar aviso">×</button></div>}
     {notice && <div className="editor-inline-success" role="status">{notice}</div>}
     {remoteCopy && <div className="editor-demo-note"><span>Há uma versão mais recente na nuvem. Sua cópia local está preservada.</span><Button size="sm" onClick={() => run(() => { downloadRecord(session.value); const remote = { ...remoteCopy, revision: Math.max(draft.revision || 0, remoteCopy.revision || 0) + 1 }; writeDraft(remote, readDrafts().find((item) => item.id === remote.id) || null); install(remote); setRemoteCopy(null) })}>Exportar esta cópia e abrir a versão da nuvem</Button></div>}
