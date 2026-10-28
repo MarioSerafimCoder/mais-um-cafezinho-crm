@@ -10,6 +10,8 @@ export type AppEnv = {
   DB?: D1Database
   DEMO_MODE?: string
   ENVIRONMENT?: string
+  EDITORIAL_TEST_ENABLED?: string
+  EDITORIAL_TEST_RECIPIENTS?: string
 }
 
 type RequestContext = {
