@@ -1,5 +1,7 @@
 # Mais um Cafezinho — CRM & Newsletter Studio
 
+Fase 5: [homologação editorial, segurança do teste e checklist de clientes](docs/FASE-5-HOMOLOGACAO.md). O endpoint de teste é desativado por padrão; não configurar flag/destinatários nem ampliar permissões antes da autorização do proprietário. A migração 0002 deve ser aplicada antes da futura ativação. Não houve envio real nesta fase.
+
 Um painel editorial em português para organizar assinantes, preparar campanhas e manter os rascunhos da newsletter. O MVP usa a API da Buttondown quando configurada e oferece dados de demonstração quando executado sem as Pages Functions.
 
 ## O que está pronto
