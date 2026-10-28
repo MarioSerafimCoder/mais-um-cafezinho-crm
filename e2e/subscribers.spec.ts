@@ -22,7 +22,7 @@ test('cadastro manual ativa o assinante sem exigir confirmação por e-mail', as
   expect(creationCount).toBe(1)
 })
 
-test('o CRM ativa um cadastro pendente existente sem enviar nova confirmação', async ({ page }) => {
+test('o botão Ativar transforma um cadastro pendente em assinante ativo', async ({ page }) => {
   let activated = false
   let updates = 0
   await page.route('**/api/status', route => route.fulfill({ json: { configured: true, connected: true, cloud: true, demo: false } }))
@@ -38,7 +38,7 @@ test('o CRM ativa um cadastro pendente existente sem enviar nova confirmação',
   })
 
   await page.goto('/subscribers')
-  await page.getByRole('button', { name: 'Ativar sem confirmação' }).click()
+  await page.getByRole('button', { name: 'Ativar', exact: true }).click()
   await expect(page.getByRole('status').filter({ hasText: 'Assinante ativado sem confirmação por e-mail' })).toBeVisible()
   await expect(page.getByRole('row').filter({ hasText: 'marioserafim.da@gmail.com' })).toContainText('Inscrito')
   expect(updates).toBe(1)

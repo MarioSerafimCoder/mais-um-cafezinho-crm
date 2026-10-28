@@ -120,7 +120,7 @@ export function SubscribersPage() {
       <div className="table-scroll"><table className="data-table"><thead><tr><th>LEITOR</th><th>STATUS</th><th>ORIGEM</th><th>DESDE</th></tr></thead><tbody>
         {activeRows.map((subscriber) => { const name = typeof subscriber.metadata?.name === 'string' ? subscriber.metadata.name : ''; return <tr key={subscriber.id}>
           <td><div className="subscriber-cell"><span className="subscriber-avatar"><UserRound size={15} /></span><div><strong>{name || subscriber.email_address}</strong>{name && <small>{subscriber.email_address}</small>}</div></div></td>
-          <td><div className="subscriber-status-cell"><StatusPill tone={statusTone(subscriber.type)}>{displayStatus(subscriber.type)}</StatusPill>{subscriber.type === 'unactivated' && <Button className="subscriber-activate-button" size="sm" variant="outline" disabled={Boolean(processingEmail)} onClick={() => void addSubscriber(subscriber.email_address)}>{processingEmail === subscriber.email_address ? 'Ativando…' : 'Ativar sem confirmação'}</Button>}</div></td>
+          <td><div className="subscriber-status-cell"><StatusPill tone={statusTone(subscriber.type)}>{displayStatus(subscriber.type)}</StatusPill>{subscriber.type === 'unactivated' && <Button className="subscriber-activate-button" size="sm" variant="outline" disabled={Boolean(processingEmail)} onClick={() => void addSubscriber(subscriber.email_address)}>{processingEmail === subscriber.email_address ? 'Ativando…' : 'Ativar'}</Button>}</div></td>
           <td>{subscriber.source ? subscriber.source.replaceAll('_', ' ') : '—'}</td>
           <td>{subscriber.creation_date ? subscriberDateLabel(subscriber.creation_date) : '—'}</td>
         </tr>})}
