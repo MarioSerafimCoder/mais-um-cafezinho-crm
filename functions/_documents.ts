@@ -8,7 +8,11 @@ export function database(env: AppEnv) {
 }
 
 export async function getDocument(env: AppEnv, kind: 'draft' | 'settings', id: string) {
-  const row = await database(env).prepare('SELECT payload, version, updated_at FROM editorial_documents WHERE kind = ? AND id = ?').bind(kind, id).first<StoredDocument>()
+  const db = database(env)
+  // Delivery immediately follows a write. Start on D1's primary so this
+  // validation cannot see a lagging replica after an automatic sync.
+  const session = typeof db.withSession === 'function' ? db.withSession('first-primary') : db
+  const row = await session.prepare('SELECT payload, version, updated_at FROM editorial_documents WHERE kind = ? AND id = ?').bind(kind, id).first<StoredDocument>()
   if (!row) throw json({ error: 'Documento não encontrado na nuvem.' }, 404)
   return { ...JSON.parse(row.payload), cloudRevision: row.version, lastCloudSavedAt: row.updated_at }
 }

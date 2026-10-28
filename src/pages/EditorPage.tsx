@@ -240,14 +240,24 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível preparar a edição.') }
   }
   const syncForDelivery = async (): Promise<DraftRecord> => {
-    const queue = persistence.current
-    if (!queue) throw new Error('Aguarde o editor terminar de carregar antes de preparar o envio.')
+    let queue = persistence.current
+    for (let attempt = 0; attempt < 30 && (!queue || !queue.status); attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      queue = persistence.current
+    }
+    if (!queue?.status) throw new Error('Não foi possível iniciar a sincronização. Confira a conexão e tente novamente.')
     for (let attempt = 0; attempt < 3; attempt++) {
       saveLocal()
       await queue.flush(true)
       const latest = sessionRef.current?.value
       if (latest?.buttondownId && latest.cloudRevision && Number.isSafeInteger(latest.revision)
-        && latest.revision === latest.syncedRevision && latest.revision === latest.cloudSavedRevision) return structuredClone(latest)
+        && latest.document && latest.revision === latest.syncedRevision && latest.revision === latest.cloudSavedRevision) {
+        const persisted = await api.cloudDraft(latest.id)
+        if (persisted.document && persisted.buttondownId === latest.buttondownId
+          && persisted.cloudRevision === latest.cloudRevision && persisted.revision === latest.revision
+          && persisted.syncedRevision === latest.revision && persisted.cloudSavedRevision === latest.revision
+          && persisted.syncedBodyHash === latest.syncedBodyHash) return persisted
+      }
     }
     throw new Error('A edição mudou durante a sincronização. Tente preparar novamente.')
   }
@@ -276,6 +286,9 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
   }
   const openDelivery = (kind: 'test' | 'campaign') => {
     setStage('send')
+    setError(''); setNotice('')
+    void syncForDelivery().then(() => setNotice('Edição salva e sincronizada automaticamente. Nenhum e-mail foi enviado.'))
+      .catch((cause) => setError(cause instanceof Error ? cause.message : 'Não foi possível sincronizar a edição para o envio.'))
     requestAnimationFrame(() => {
       const panel = deliveryTools.current
       if (!panel) return
