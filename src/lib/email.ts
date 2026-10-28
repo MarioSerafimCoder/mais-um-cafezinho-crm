@@ -22,7 +22,18 @@ export function validateDraftPayload(subject: string, html: string) {
 // Newsletter scaffolding remains controlled by Buttondown on the Free plan.
 export function compatibleEmailBody(html: string) {
   if (!isSafeEmailBody(html)) throw new Error('HTML não permitido.')
-  return ensureUnsubscribeLink(extractEmailBody(html)).trim()
+  const fragment = ensureUnsubscribeLink(extractEmailBody(html)).replace(/<!--(?:\$|\/\$|html|head|body)-->/g, '').trim()
+  // Markdown treats indented/blank lines as code. Keep a single physical HTML
+  // line; character references preserve visible newlines, including in <pre>.
+  let preDepth = 0
+  return fragment.replace(/<!--[\s\S]*?-->|<(?:"[^"]*"|'[^']*'|[^'">])*>|[^<]+/g, token => {
+    if (token.startsWith('<')) {
+      if (/^<pre\b/i.test(token)) preDepth++
+      if (/^<\/pre\b/i.test(token)) preDepth--
+      return token.replace(/\r?\n\s*/g, ' ')
+    }
+    return preDepth ? token.replace(/\r/g, '&#13;').replace(/\n/g, '&#10;') : token.replace(/[\t\r\n ]+/g, ' ')
+  })
 }
 
 export function extractEmailBody(html: string) {

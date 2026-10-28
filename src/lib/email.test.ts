@@ -47,7 +47,19 @@ describe('draft HTML', () => {
   })
   it('não junta palavras nem modifica espaços em conteúdo pré-formatado', () => {
     const html = '<p><a href="https://example.com">Uma</a> <strong>conversa</strong></p><pre> a\n\n b </pre><a href="{{ unsubscribe_url }}">Sair</a>'
-    expect(validateDraftPayload('Teste', html).body).toBe(`<!-- buttondown-editor-mode: plaintext -->${html}`)
+    const body = validateDraftPayload('Teste', html).body
+    expect(body).not.toContain('\n')
+    expect(body).toContain('</a> <strong>')
+    expect(body).toContain('<pre> a&#10;&#10; b </pre>')
+    const original = new DOMParser().parseFromString(html, 'text/html')
+    const exported = new DOMParser().parseFromString(body, 'text/html')
+    expect(exported.body.textContent).toBe(original.body.textContent)
+  })
+  it('retira marcadores internos React e recuos de formatação que virariam código Markdown', () => {
+    const body = validateDraftPayload('Teste', '<body><!--$--><!--html--><!--head--><!--body-->\n    <table\n width="100%">\n <tr><td>Olá\n mundo</td></tr>\n</table><!--/$--></body>').body
+    expect(body).not.toContain('<!--head-->')
+    expect(body).not.toContain('\n')
+    expect(body).toContain('<td>Olá mundo</td>')
   })
 })
 
