@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { CheckCircle2, ChevronDown, LockKeyhole, Users } from 'lucide-react'
 import { api } from '../lib/api'
 import type { ApiPage, DraftRecord, PreparedCampaignDelivery, Subscriber } from '../types'
 import { Button } from './ui'
@@ -113,10 +114,27 @@ export function CampaignDelivery({ draft }: { draft: DraftRecord }) {
   }
 
   return <details className="inspector-section campaign-delivery">
-    <summary>Enviar campanha</summary>
-    <p>Escolha contatos ativos específicos ou todos os assinantes ativos. O envio só começa depois da prévia e da confirmação final.</p>
-    {enabled === false && <p role="status">Envio de campanha desativado no servidor. A ativação exige permissão de envio da Buttondown e autorização do proprietário.</p>}
-    {enabled === null && !error && <p role="status">Consultando autorização de envio…</p>}
+    <summary className="campaign-delivery-summary">
+      <ChevronDown size={15} aria-hidden="true" />
+      <span className="campaign-summary-title">Enviar campanha</span>
+      {enabled === false && <span className="campaign-lock-pill"><LockKeyhole size={11} />Bloqueado</span>}
+      {enabled === true && <span className="campaign-ready-pill"><CheckCircle2 size={11} />Disponível</span>}
+    </summary>
+    {enabled === false && <div className="campaign-locked-panel" role="status">
+      <div className="campaign-locked-icon"><LockKeyhole size={18} /></div>
+      <div className="campaign-locked-copy">
+        <span className="inspector-label">PROTEÇÃO DE ENVIO</span>
+        <strong>Campanhas bloqueadas</strong>
+        <p>A ativação exige autorização explícita do proprietário e permissão de envio da Buttondown.</p>
+      </div>
+      <Button className="campaign-locked-button" size="sm" variant="outline" icon={<LockKeyhole size={14} />} disabled>Envio não autorizado</Button>
+      <span className="campaign-locked-hint"><Users size={13} />Nenhum assinante será contatado.</span>
+    </div>}
+    {enabled === null && !error && <div className="campaign-state-panel" role="status"><span className="campaign-spinner" />Verificando autorização de envio…</div>}
+    {enabled === true && <>
+      <p className="campaign-delivery-intro">Escolha a audiência, revise a prévia e confirme o envio.</p>
+      <ol className="campaign-flow" aria-label="Etapas do envio de campanha"><li><span>1</span>Audiência</li><li><span>2</span>Prévia</li><li><span>3</span>Confirmação</li></ol>
+    </>}
     {enabled && <>
       <fieldset className="delivery-audience-options" disabled={busy || Boolean(prepared)}>
         <legend>Audiência</legend>
