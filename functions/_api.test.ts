@@ -6,6 +6,7 @@ import { onRequestPost as create } from './api/emails/index'
 import { onRequestPatch as patch } from './api/emails/[id]'
 import { onRequestPost as upload } from './api/images'
 import { onRequestGet as subscribers } from './api/subscribers'
+import { matchesButtondownTemplate } from './_utils'
 
 const env = { BUTTONDOWN_API_KEY: 'test-only-key' }
 const request = new Request('https://crm.marioserafim.com.br/api/status')
@@ -13,6 +14,13 @@ afterEach(() => vi.unstubAllGlobals())
 const mock = (data: unknown, code = 200) => vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => Response.json(data, { status: code })))
 
 describe('Buttondown com mocks, sem chamadas externas', () => {
+  it('não trata template nulo (padrão da newsletter) como divergência', () => {
+    expect(matchesButtondownTemplate(null, 'modern')).toBe(true)
+    expect(matchesButtondownTemplate(null, 'classic')).toBe(true)
+    expect(matchesButtondownTemplate('classic', 'classic')).toBe(true)
+    expect(matchesButtondownTemplate('classic', 'modern')).toBe(false)
+  })
+
   it('recusa uploads acima do limite sem encaminhar bytes à Buttondown', async () => {
     mock({})
     const req = new Request('https://crm.marioserafim.com.br/api/images', { method: 'POST', headers: { 'content-length': '8500001' } })

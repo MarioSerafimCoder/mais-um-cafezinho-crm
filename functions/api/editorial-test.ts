@@ -1,5 +1,5 @@
 import { database, getDocument } from '../_documents'
-import { buttondown, errorResponse, json, parseJson, validId, type AppEnv } from '../_utils'
+import { buttondown, errorResponse, json, matchesButtondownTemplate, parseJson, validId, type AppEnv } from '../_utils'
 
 function recipients(env: AppEnv) {
   return (env.EDITORIAL_TEST_RECIPIENTS || '').split(',').map(s => s.trim()).filter(s => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))
@@ -33,8 +33,12 @@ export async function onRequestPost({ request, env }: { request: Request; env: A
     const draft = await getDocument(env, 'draft', input.draftId)
     if (!draft.document || !draft.buttondownId || !validId(draft.buttondownId) || draft.cloudRevision !== input.cloudRevision || !Number.isSafeInteger(draft.revision) || draft.revision < 0 || draft.revision !== draft.syncedRevision || draft.revision !== draft.cloudSavedRevision) return json({ error: 'Salve no D1 e sincronize a revisão atual antes do teste.' }, 409)
     const db = database(env)
-    const campaign = await buttondown({ request, env }, `/emails/${draft.buttondownId}`) as { status: string; body: string; subject: string; description?: string; template?: string }
-    if (campaign.status !== 'draft' || typeof campaign.body !== 'string' || campaign.subject !== draft.subject || (campaign.description || '') !== (draft.description || '') || (campaign.template || 'classic') !== (draft.buttondownTemplate || 'classic') || draft.syncedBodyHash !== await bodyHash(campaign.body)) return json({ error: 'Campanha remota divergente ou fora de draft. Sincronize novamente.' }, 409)
+    const campaign = await buttondown({ request, env }, `/emails/${draft.buttondownId}`) as { status: string; body: string; subject: string; description?: string; template?: string | null }
+    if (campaign.status !== 'draft') return json({ error: 'Esta campanha já não está em rascunho na Buttondown. Sincronize um rascunho antes de preparar o teste.' }, 409)
+    if (typeof campaign.body !== 'string') return json({ error: 'A Buttondown não retornou o conteúdo da campanha.' }, 502)
+    if (campaign.subject !== draft.subject || (campaign.description || '') !== (draft.description || '')) return json({ error: 'Assunto ou texto de prévia divergente. Salve e sincronize novamente.' }, 409)
+    if (!matchesButtondownTemplate(campaign.template, draft.buttondownTemplate)) return json({ error: 'O template da campanha na Buttondown diverge da revisão do CRM. Salve e sincronize novamente.' }, 409)
+    if (draft.syncedBodyHash !== await bodyHash(campaign.body)) return json({ error: 'O conteúdo na Buttondown diverge da revisão salva no CRM. Salve e sincronize novamente.' }, 409)
     if (!input.attemptId) {
       if (!Number.isInteger(input.recipientIndex)) return json({ error: 'Selecione um destino autorizado.' }, 400)
       const recipient = recipients(env)[Number(input.recipientIndex)]

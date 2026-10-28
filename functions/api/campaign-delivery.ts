@@ -1,5 +1,5 @@
 import { database, getDocument } from '../_documents'
-import { buttondown, errorResponse, json, parseJson, validId, type AppEnv } from '../_utils'
+import { buttondown, errorResponse, json, matchesButtondownTemplate, parseJson, validId, type AppEnv } from '../_utils'
 
 type Context = { request: Request; env: AppEnv }
 type Audience = { mode: 'all_active' } | { mode: 'selected'; subscriberIds: string[] }
@@ -67,12 +67,11 @@ async function currentDraft(context: Context, draftId: string, cloudRevision: nu
     throw json({ error: 'Salve no D1 e sincronize a revisão atual antes do envio.' }, 409)
   }
   const campaign = await buttondown(context, `/emails/${encodeURIComponent(draft.buttondownId)}`) as RemoteCampaign
-  if (campaign.status !== 'draft' || typeof campaign.body !== 'string' || campaign.subject !== draft.subject
-    || (campaign.description || '') !== (draft.description || '')
-    || (campaign.template || 'classic') !== (draft.buttondownTemplate || 'classic')
-    || draft.syncedBodyHash !== await hash(campaign.body)) {
-    throw json({ error: 'A campanha remota diverge do rascunho ou não está em draft.' }, 409)
-  }
+  if (campaign.status !== 'draft') throw json({ error: 'Esta campanha já não está em rascunho na Buttondown. Só campanhas em draft podem ser preparadas.' }, 409)
+  if (typeof campaign.body !== 'string') throw json({ error: 'A Buttondown não retornou o conteúdo da campanha. Atualize a integração e tente novamente.' }, 502)
+  if (campaign.subject !== draft.subject || (campaign.description || '') !== (draft.description || '')) throw json({ error: 'Assunto ou texto de prévia divergente. Salve e sincronize a revisão atual novamente.' }, 409)
+  if (!matchesButtondownTemplate(campaign.template, draft.buttondownTemplate)) throw json({ error: 'O template da campanha na Buttondown diverge da revisão do CRM. Salve e sincronize novamente.' }, 409)
+  if (draft.syncedBodyHash !== await hash(campaign.body)) throw json({ error: 'O conteúdo na Buttondown diverge da revisão salva no CRM. Salve e sincronize novamente.' }, 409)
   return { draft, campaign }
 }
 function parseAudience(value: unknown): Audience | null {

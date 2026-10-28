@@ -103,6 +103,13 @@ export function pageResult(value: unknown) {
 
 export function validId(value: string) { return /^[a-zA-Z0-9_-]{1,80}$/.test(value) }
 
+// A null template inherits the newsletter default; the email endpoint does not
+// expose that default alongside the campaign, so only explicit overrides compare.
+export function matchesButtondownTemplate(actual: string | null | undefined, expected: string | undefined) {
+  const desired = expected || 'classic'
+  return actual == null || actual === desired
+}
+
 export function draftPayload(value: unknown): { subject: string; body: string; status: 'draft'; description?: string; template?: 'classic' | 'modern' } | null {
   if (!value || typeof value !== 'object') return null
   const data = value as Record<string, unknown>

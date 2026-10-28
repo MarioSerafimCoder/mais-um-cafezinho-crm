@@ -10,7 +10,7 @@ function setup(overrides = {}) {
   const row = { draft_id: draft.id, cloud_revision: 4, recipient: 'owner@example.com', campaign_id: 'em_test', body: '<p>Teste</p>', subject: draft.subject, created_at: new Date().toISOString() }
   const db = { prepare: (sql: string) => ({ bind: () => ({ first: async () => sql.includes('editorial_documents') ? { payload: JSON.stringify(draft), version: 4 } : row, run: async () => { if (sql.includes("state = 'attempted'")) { const changes = claimed ? 0 : 1; claimed = true; return { meta: { changes } } }; return { meta: { changes: 1 } } } }) }) }
   const env = { DB: db, BUTTONDOWN_API_KEY: 'mock-only', EDITORIAL_TEST_ENABLED: 'true', EDITORIAL_TEST_RECIPIENTS: 'owner@example.com', ...overrides } as unknown as AppEnv
-  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ status: 'draft', body: row.body, subject: row.subject })))
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ status: 'draft', body: row.body, subject: row.subject, template: 'classic' })))
   return (body: object) => onRequestPost({ env, request: new Request('https://example.com/api/editorial-test', { method: 'POST', body: JSON.stringify({ draftId: draft.id, cloudRevision: 4, ...body }) }) })
 }
 afterEach(() => vi.unstubAllGlobals())
@@ -30,7 +30,7 @@ it('exige confirmação e impede repetição; usa somente send-draft', async () 
 it('recusa campanha já enviada', async () => { const run = setup(); vi.mocked(fetch).mockResolvedValue(Response.json({ status: 'sent' })); expect((await run({ recipientIndex: 0 })).status).toBe(409) })
 it('resultado incerto não permite novo envio da mesma tentativa', async () => {
   const run = setup()
-  vi.mocked(fetch).mockImplementation(async (url) => { if (String(url).endsWith('/send-draft')) throw new TypeError('timeout'); return Response.json({ status: 'draft', body: '<p>Teste</p>', subject: draft.subject }) })
+  vi.mocked(fetch).mockImplementation(async (url) => { if (String(url).endsWith('/send-draft')) throw new TypeError('timeout'); return Response.json({ status: 'draft', body: '<p>Teste</p>', subject: draft.subject, template: 'classic' }) })
   expect((await run({ attemptId: 'test', confirm: true })).status).toBe(502)
   expect((await run({ attemptId: 'test', confirm: true })).status).toBe(409)
 })
