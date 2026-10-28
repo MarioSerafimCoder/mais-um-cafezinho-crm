@@ -32,18 +32,39 @@ export const onRequestPost = async ({ request, env }: Context) => {
     if (emailAddress.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailAddress)) return json({ error: 'Informe um endereço de e-mail válido.' }, 400)
 
     const search = new URLSearchParams({ email_address: emailAddress, page: '1' })
-    const current = await buttondown({ request, env }, `/subscribers?${search}`) as { results?: Array<{ email_address?: unknown; type?: unknown }> }
+    const current = await buttondown({ request, env }, `/subscribers?${search}`) as { results?: Array<{ id?: unknown; email_address?: unknown; type?: unknown }> }
     if (!Array.isArray(current?.results)) throw new Error('INVALID_SUBSCRIBER_RESPONSE')
-    const existing = current.results?.find((subscriber) => typeof subscriber.email_address === 'string' && subscriber.email_address.toLowerCase() === emailAddress)
-    if (existing) return json({ error: 'Esse e-mail já está na base. Nenhum cadastro existente foi alterado.', existingType: typeof existing.type === 'string' ? existing.type : undefined }, 409)
+    const existing = current.results.find((subscriber) => typeof subscriber.email_address === 'string' && subscriber.email_address.toLowerCase() === emailAddress)
+    if (existing) {
+      const existingId = typeof existing.id === 'string' ? existing.id : emailAddress
+      if (existing.type === 'unactivated') {
+        const activated = await buttondown({ request, env }, `/subscribers/${encodeURIComponent(existingId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'regular' }),
+        }) as { id?: unknown; email_address?: unknown; type?: unknown; creation_date?: unknown }
+        if (typeof activated.id !== 'string' || typeof activated.email_address !== 'string' || activated.email_address.toLowerCase() !== emailAddress || activated.type !== 'regular') {
+          return json({ error: 'A Buttondown não confirmou a ativação do assinante.' }, 502)
+        }
+        return json({ id: activated.id, email_address: activated.email_address, type: 'regular', creation_date: typeof activated.creation_date === 'string' ? activated.creation_date : null, activatedExisting: true }, 200)
+      }
+      if (existing.type === 'regular' || existing.type === 'premium') {
+        return json({ id: typeof existing.id === 'string' ? existing.id : '', email_address: emailAddress, type: existing.type, alreadyActive: true }, 200)
+      }
+      const statusLabel = typeof existing.type === 'string' ? existing.type : 'desconhecido'
+      const message = existing.type === 'unsubscribed'
+        ? 'Esse endereço está descadastrado e não será reativado automaticamente.'
+        : `Esse endereço está na base com status ${statusLabel} e não foi alterado.`
+      return json({ error: message, existingType: statusLabel }, 409)
+    }
 
     const created = await buttondown({ request, env }, '/subscribers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email_address: emailAddress }),
+      body: JSON.stringify({ email_address: emailAddress, type: 'regular' }),
     }) as { id?: unknown; email_address?: unknown; type?: unknown; creation_date?: unknown }
-    if (typeof created.id !== 'string' || typeof created.email_address !== 'string' || created.email_address.toLowerCase() !== emailAddress || typeof created.type !== 'string') {
-      return json({ error: 'A Buttondown respondeu sem confirmar o cadastro. Atualize a lista antes de repetir.' }, 502)
+    if (typeof created.id !== 'string' || typeof created.email_address !== 'string' || created.email_address.toLowerCase() !== emailAddress || created.type !== 'regular') {
+      return json({ error: 'A Buttondown respondeu sem confirmar a ativação. Atualize a lista antes de repetir.' }, 502)
     }
     return json({ id: created.id, email_address: created.email_address, type: created.type, creation_date: typeof created.creation_date === 'string' ? created.creation_date : null }, 201)
   } catch (error) {

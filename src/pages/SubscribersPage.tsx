@@ -35,7 +35,7 @@ export function SubscribersPage() {
   const [error, setError] = useState('')
   const [reload, setReload] = useState(0)
   const [newEmail, setNewEmail] = useState('')
-  const [creating, setCreating] = useState(false)
+  const [processingEmail, setProcessingEmail] = useState('')
   const [createError, setCreateError] = useState('')
   const [createMessage, setCreateMessage] = useState('')
 
@@ -69,22 +69,29 @@ export function SubscribersPage() {
   const visibleError = loading ? '' : error
   const activeRows = useMemo(() => pageData?.results || [], [pageData])
 
-  const createSubscriber = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (!status?.configured || creating) return
-    setCreating(true); setCreateError(''); setCreateMessage('')
+  const addSubscriber = async (emailAddress: string) => {
+    if (!status?.configured || processingEmail) return
+    setProcessingEmail(emailAddress); setCreateError(''); setCreateMessage('')
     try {
-      const subscriber = await api.createSubscriber(newEmail)
-      setNewEmail('')
+      const subscriber = await api.addSubscriber(emailAddress)
+      if (!subscriber.alreadyActive) setNewEmail('')
       setPage(1)
       setSearch(subscriber.email_address)
       setReload((value) => value + 1)
-      setCreateMessage(subscriber.type === 'unactivated'
-        ? `Cadastro criado. A Buttondown enviará uma confirmação para ${subscriber.email_address}; o status ficará pendente até a confirmação.`
-        : `Assinante cadastrado: ${subscriber.email_address}.`)
+      setCreateMessage(subscriber.activatedExisting
+        ? `Assinante ativado sem confirmação por e-mail: ${subscriber.email_address}.`
+        : subscriber.alreadyActive
+          ? `Este endereço já estava ativo: ${subscriber.email_address}.`
+          : `Assinante cadastrado e ativo, sem confirmação por e-mail: ${subscriber.email_address}.`)
     } catch (cause) {
       setCreateError(cause instanceof Error ? cause.message : 'Não foi possível cadastrar este assinante.')
-    } finally { setCreating(false) }
+    } finally { setProcessingEmail('') }
+  }
+
+  const createSubscriber = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!newEmail.trim()) return
+    await addSubscriber(newEmail)
   }
 
   return <>
@@ -93,11 +100,11 @@ export function SubscribersPage() {
     {status?.configured && <section className="subscriber-create-panel" aria-labelledby="subscriber-create-title">
       <div className="subscriber-create-heading">
         <span className="subscriber-create-icon"><UserPlus size={18} /></span>
-        <div><h2 id="subscriber-create-title">Cadastro manual</h2><p>Adicione um endereço. A Buttondown pedirá confirmação antes de ativar a inscrição.</p></div>
+        <div><h2 id="subscriber-create-title">Cadastro manual</h2><p>Cadastros novos e pendentes são ativados diretamente, sem confirmação por e-mail.</p></div>
       </div>
       <form className="subscriber-create-form" onSubmit={(event) => void createSubscriber(event)}>
-        <label className="field"><span className="field-label">E-mail do assinante</span><span className="subscriber-email-input"><Mail size={15} /><input type="email" autoComplete="email" required maxLength={254} value={newEmail} onChange={(event) => setNewEmail(event.target.value)} placeholder="nome@exemplo.com" disabled={creating} /></span></label>
-        <Button type="submit" size="sm" icon={creating ? undefined : <UserPlus size={15} />} disabled={creating || !newEmail.trim()}>{creating ? 'Cadastrando…' : 'Cadastrar assinante'}</Button>
+        <label className="field"><span className="field-label">E-mail do assinante</span><span className="subscriber-email-input"><Mail size={15} /><input type="email" autoComplete="email" required maxLength={254} value={newEmail} onChange={(event) => setNewEmail(event.target.value)} placeholder="nome@exemplo.com" disabled={Boolean(processingEmail)} /></span></label>
+        <Button type="submit" size="sm" icon={processingEmail ? undefined : <UserPlus size={15} />} disabled={Boolean(processingEmail) || !newEmail.trim()}>{processingEmail ? 'Ativando…' : 'Cadastrar e ativar'}</Button>
       </form>
       {createError && <p className="subscriber-create-feedback subscriber-create-error" role="alert">{createError}</p>}
       {createMessage && <p className="subscriber-create-feedback subscriber-create-success" role="status"><CircleCheck size={15} />{createMessage}</p>}
@@ -113,14 +120,14 @@ export function SubscribersPage() {
       <div className="table-scroll"><table className="data-table"><thead><tr><th>LEITOR</th><th>STATUS</th><th>ORIGEM</th><th>DESDE</th></tr></thead><tbody>
         {activeRows.map((subscriber) => { const name = typeof subscriber.metadata?.name === 'string' ? subscriber.metadata.name : ''; return <tr key={subscriber.id}>
           <td><div className="subscriber-cell"><span className="subscriber-avatar"><UserRound size={15} /></span><div><strong>{name || subscriber.email_address}</strong>{name && <small>{subscriber.email_address}</small>}</div></div></td>
-          <td><StatusPill tone={statusTone(subscriber.type)}>{displayStatus(subscriber.type)}</StatusPill></td>
+          <td><div className="subscriber-status-cell"><StatusPill tone={statusTone(subscriber.type)}>{displayStatus(subscriber.type)}</StatusPill>{subscriber.type === 'unactivated' && <Button className="subscriber-activate-button" size="sm" variant="outline" disabled={Boolean(processingEmail)} onClick={() => void addSubscriber(subscriber.email_address)}>{processingEmail === subscriber.email_address ? 'Ativando…' : 'Ativar sem confirmação'}</Button>}</div></td>
           <td>{subscriber.source ? subscriber.source.replaceAll('_', ' ') : '—'}</td>
           <td>{subscriber.creation_date ? subscriberDateLabel(subscriber.creation_date) : '—'}</td>
         </tr>})}
       </tbody></table></div>
       {activeRows.length === 0 && <div className="table-empty">{query ? `Nenhum assinante encontrado para “${query}”.` : 'Nenhum assinante nesta página.'}</div>}
       <div className="table-pagination"><span>{activeRows.length} registros nesta página · {pageData?.count?.toLocaleString('pt-BR') ?? '—'} no total</span><div><button className="icon-button" aria-label="Página anterior" disabled={page <= 1 || loading} onClick={() => setPage((value) => Math.max(1, value - 1))}><ChevronLeft size={17} /></button><span className="page-indicator">Página {page}</span><button className="icon-button" aria-label="Próxima página" disabled={!pageData?.next || loading} onClick={() => setPage((value) => value + 1)}><ChevronRight size={17} /></button></div></div>
-      <p className="privacy-note"><ShieldCheck size={14} /> Descadastrados não são reativados por este formulário. Novos cadastros aguardam a confirmação do assinante.</p>
+      <p className="privacy-note"><ShieldCheck size={14} /> Descadastrados, bloqueados, reclamações e endereços não entregáveis não são reativados pelo formulário.</p>
     </>}
   </>
 }

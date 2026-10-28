@@ -2,9 +2,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { SubscribersPage } from './SubscribersPage'
 
-const mocks = vi.hoisted(() => ({ status: vi.fn(), subscribers: vi.fn(), createSubscriber: vi.fn() }))
+const mocks = vi.hoisted(() => ({ status: vi.fn(), subscribers: vi.fn(), addSubscriber: vi.fn() }))
 vi.mock('../lib/api', () => ({
-  api: { status: mocks.status, subscribers: mocks.subscribers, createSubscriber: mocks.createSubscriber },
+  api: { status: mocks.status, subscribers: mocks.subscribers, addSubscriber: mocks.addSubscriber },
   requireConnection: (status: unknown) => status,
 }))
 
@@ -12,18 +12,18 @@ afterEach(cleanup)
 beforeEach(() => {
   mocks.status.mockReset().mockResolvedValue({ configured: true, connected: true, cloud: true, demo: false })
   mocks.subscribers.mockReset().mockResolvedValue({ results: [], count: 0, next: null, previous: null })
-  mocks.createSubscriber.mockReset()
+  mocks.addSubscriber.mockReset()
 })
 
-it('cadastra apenas após envio manual e mostra que a confirmação está pendente', async () => {
-  mocks.createSubscriber.mockResolvedValue({ id: 'sub_new', email_address: 'marioserafim.da@gmail.com', type: 'unactivated', creation_date: '2026-10-28T12:00:00Z' })
+it('ativa o cadastro depois do clique e informa que não precisa confirmar por e-mail', async () => {
+  mocks.addSubscriber.mockResolvedValue({ id: 'sub_new', email_address: 'marioserafim.da@gmail.com', type: 'regular', creation_date: '2026-10-28T12:00:00Z' })
   render(<SubscribersPage />)
 
   const email = await screen.findByRole('textbox', { name: 'E-mail do assinante' })
-  expect(mocks.createSubscriber).not.toHaveBeenCalled()
+  expect(mocks.addSubscriber).not.toHaveBeenCalled()
   fireEvent.change(email, { target: { value: 'marioserafim.da@gmail.com' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Cadastrar assinante' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Cadastrar e ativar' }))
 
-  await waitFor(() => expect(mocks.createSubscriber).toHaveBeenCalledWith('marioserafim.da@gmail.com'))
-  expect(await screen.findByRole('status')).toHaveTextContent(/ficará pendente até a confirmação/)
+  await waitFor(() => expect(mocks.addSubscriber).toHaveBeenCalledWith('marioserafim.da@gmail.com'))
+  expect(await screen.findByRole('status')).toHaveTextContent(/sem confirmação por e-mail/)
 })
