@@ -6,3 +6,13 @@ compatibility_date = "2026-10-27"
 # Public validation parameters; BUTTONDOWN_API_KEY belongs only in Pages Secrets.
 CF_ACCESS_TEAM_DOMAIN = "wispy-hall-9782.cloudflareaccess.com"
 CF_ACCESS_AUD = "1dcdb17fc28023520a352aa35d32e11ba6514a74df64334766e241d57e775c54"
+
+[env.production.vars]
+CF_ACCESS_TEAM_DOMAIN = "wispy-hall-9782.cloudflareaccess.com"
+CF_ACCESS_AUD = "1dcdb17fc28023520a352aa35d32e11ba6514a74df64334766e241d57e775c54"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "mais-um-cafezinho-editorial"
+database_id = "4460ef9d-fb2b-4756-aa00-37fb0b80d056"
+migrations_dir = "migrations"
