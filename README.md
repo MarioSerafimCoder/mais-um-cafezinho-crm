@@ -52,6 +52,8 @@ Um rascunho real foi criado na Buttondown sem envio. O HTML retornado pela API c
 
 ## Configuração de produção
 
+A fase 4 usa HTML inline no modo de composição Markdown da Buttondown, preservando JSON/D1 como fonte. A prévia diferencia original, fragmento enviado e acesso ao processado. Consulte [estratégia, comparação real, upload e pendências](docs/FASE-4-FIDELIDADE.md). O plano conectado foi conferido como Free; envio de testes continua desabilitado.
+
 Destino de produção: `https://crm.marioserafim.com.br`. O projeto usa Cloudflare Pages com integração GitHub na branch `main`. Consulte [o guia de operação](docs/PRODUCAO.md) para ativação, validação e pendências.
 
 1. Use `pnpm build` como comando de build e `dist` como diretório de saída.
