@@ -10,7 +10,7 @@ test('home continua o rascunho local mesmo sem dados da plataforma', async ({ pa
   await page.screenshot({ path: 'logs/ux-dashboard-desktop.png' })
 })
 
-test('assunto longo e painel recolhível permanecem utilizáveis no notebook', async ({ page }) => {
+test('etapas de edição, prévia e envio permanecem utilizáveis no notebook', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 768 })
   await page.goto('/editor/new?template=blog')
   const subject = page.getByLabel('Assunto da newsletter')
@@ -25,9 +25,11 @@ test('assunto longo e painel recolhível permanecem utilizáveis no notebook', a
   await expect(page.locator('.tiptap')).toBeVisible()
   await page.getByRole('button', { name: 'Mostrar ferramentas' }).click()
   await expect(page.locator('#editor-inspector')).toBeVisible()
-  await page.getByRole('button', { name: 'Enviar campanha', exact: true }).first().click()
+  await page.getByRole('button', { name: '2 · Prévia' }).click()
+  await expect(page.getByRole('heading', { name: 'Revise antes de enviar' })).toBeVisible()
+  await page.getByRole('button', { name: 'Continuar para envio' }).click()
   await expect(page.locator('.campaign-delivery')).toHaveAttribute('open', '')
-  await page.getByRole('button', { name: 'Enviar teste', exact: true }).first().click()
   await expect(page.getByRole('button', { name: 'Atualizar destinatário e histórico' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Enviar teste' })).toBeVisible()
   await page.screenshot({ path: 'logs/ux-editor-notebook.png' })
 })

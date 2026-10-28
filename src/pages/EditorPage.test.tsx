@@ -41,10 +41,10 @@ it('preserva e salva a edição ao entrar e sair da prévia', async () => {
   openEditor()
   const body = await screen.findByLabelText('Conteúdo de teste')
   fireEvent.change(body, { target: { value: '<p>Minha edição preservada.</p>' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Prévia' }))
-  await screen.findByTitle('Prévia da newsletter')
+  fireEvent.click(screen.getByRole('button', { name: '2 · Prévia' }))
+  await screen.findByTitle('Prévia da edição')
   await waitFor(() => expect(readDrafts()[0]?.document?.content?.[0].content?.[0].text).toContain('Minha edição preservada.'))
-  fireEvent.click(screen.getByRole('button', { name: 'Escrever' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Voltar à edição' }))
   expect(screen.getByLabelText('Conteúdo de teste')).toHaveValue('<p>Minha edição preservada.</p>')
 })
 

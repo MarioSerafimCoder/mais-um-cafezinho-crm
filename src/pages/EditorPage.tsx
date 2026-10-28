@@ -4,7 +4,7 @@ import { EmailEditor, type EmailEditorRef } from '@react-email/editor'
 import { StarterKit } from '@react-email/editor/extensions'
 import { EmailTheming, useEditorImage } from '@react-email/editor/plugins'
 import '@react-email/editor/themes/default.css'
-import { ArrowLeft, ArrowDown, ArrowUp, Copy, Monitor, Redo2, Save, Smartphone, Trash2, Undo2, UploadCloud } from 'lucide-react'
+import { ArrowLeft, ArrowDown, ArrowUp, Copy, Redo2, Save, Trash2, Undo2, UploadCloud } from 'lucide-react'
 import { api, ApiError } from '../lib/api'
 import { getTemplate, templates } from '../data/templates'
 import { extractEmailBody, compatibleEmailBody } from '../lib/email'
@@ -58,16 +58,14 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
   const [notice, setNotice] = useState('')
   const [loadError, setLoadError] = useState('')
   const [recoveryRecord, setRecoveryRecord] = useState<DraftRecord | null>(null)
-  const [preview, setPreview] = useState(false)
+  const [stage, setStage] = useState<'edit' | 'preview' | 'send'>('edit')
   const [html, setHtml] = useState('')
-  const [previewBusy, setPreviewBusy] = useState(false)
   const [previewKind, setPreviewKind] = useState<'original' | 'compatible'>('original')
-  const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop')
   const [replacement, setReplacement] = useState<NewsletterTemplateId | null>(null)
   const [remoteCopy, setRemoteCopy] = useState<DraftRecord | null>(null)
   const [showHtml, setShowHtml] = useState(false)
   const [toolsOpen, setToolsOpen] = useState(true)
-  const deliveryTools = useRef<HTMLDetailsElement | null>(null)
+  const deliveryTools = useRef<HTMLElement | null>(null)
   const blocker = useBlocker(() => Boolean(sessionRef.current?.dirty || captureError.current))
   const cancelPending = useCallback(() => { previewRequest.current++; if (timer.current) clearTimeout(timer.current) }, [])
 
@@ -201,18 +199,17 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
       } else previewSelection.current = { from: editor.state.selection.from, to: editor.state.selection.to }
     }
     const request = ++previewRequest.current
-    setPreviewBusy(true); setError('')
+    setError('')
     try {
       for (let attempt = 0; attempt < 3; attempt++) {
         saveLocal()
         const revision = sessionRef.current?.value.revision
         const result = await exportHtml()
         if (request !== previewRequest.current) return
-        if (revision === sessionRef.current?.value.revision) { setHtml(result); setPreview(true); return }
+      if (revision === sessionRef.current?.value.revision) { setHtml(result); setStage('preview'); return }
       }
       throw new Error('O texto mudou durante a geração da prévia. Tente novamente quando terminar a frase.')
     } catch (cause) { if (request === previewRequest.current) setError(cause instanceof Error ? cause.message : 'Não foi possível gerar a prévia.') }
-    finally { if (request === previewRequest.current) setPreviewBusy(false) }
   }
 
   useEffect(() => { htmlExporter.current = exportHtml })
@@ -260,54 +257,57 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
 
   const run = (action: () => void | Promise<void>) => { setNotice(''); setError(''); void Promise.resolve().then(action).catch((cause) => setError(cause instanceof Error ? cause.message : 'Não foi possível concluir a ação.')) }
   const insert = (kind: string) => {
-    if (!editor || preview) return
+    if (!editor) return
     if (kind === 'image') { const input = document.getElementById('image-url'); const panel = input?.closest('details'); if (panel) panel.open = true; input?.focus(); return }
     if (kind === 'button') editor.chain().focus().setButton().run()
     else editor.chain().focus().insertContent(({ paragraph: '<p>Escreva por aqui.</p>', heading: '<h2>Uma nova ideia</h2>', quote: '<blockquote><p>Uma frase que pede uma pausa.</p></blockquote>', divider: '<hr />' } as Record<string, string>)[kind]).run()
   }
   const openDelivery = (kind: 'test' | 'campaign') => {
-    setToolsOpen(true)
+    setStage('send')
     requestAnimationFrame(() => {
       const panel = deliveryTools.current
       if (!panel) return
-      panel.open = true
       const target = kind === 'campaign' ? panel.querySelector<HTMLDetailsElement>('.campaign-delivery') : panel.querySelector<HTMLElement>('.test-delivery')
-      if (target instanceof HTMLDetailsElement) target.open = true
-      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (target instanceof HTMLDetailsElement) target.open = true;
       (target?.querySelector('summary, button') as HTMLElement | null)?.focus()
     })
   }
+  const returnToEdit = () => {
+    setStage('edit')
+    requestAnimationFrame(() => {
+      if (editor && previewSelection.current) editor.chain().focus().setTextSelection(previewSelection.current).run()
+      else editor?.commands.focus()
+    })
+  }
 
-  return <div className="editor-page">
+  return <div className={`editor-page stage-${stage}`}>
+    <nav className="editor-stages" aria-label="Etapas da newsletter"><button className={stage === 'edit' ? 'active' : ''} onClick={returnToEdit}>1 · Edição</button><button className={stage === 'preview' ? 'active' : ''} onClick={() => void openPreview()}>2 · Prévia</button><button className={stage === 'send' ? 'active' : ''} onClick={() => openDelivery('campaign')}>3 · Envio</button></nav>
     <div className="editor-topline"><Link className="back-link" to="/campaigns"><ArrowLeft size={15} /> Edições</Link><span className="editor-save-state" data-state={session.state} role="status">{saveLabel}</span><button className="inspector-toggle" type="button" aria-expanded={toolsOpen} aria-controls="editor-inspector" onClick={() => setToolsOpen(value => !value)}>{toolsOpen ? 'Recolher ferramentas' : 'Mostrar ferramentas'}</button></div>
     <div className="editor-heading"><div className="editor-heading-copy"><p className="eyebrow">CADERNO DE EDIÇÃO</p><textarea className="subject-input" rows={1} value={draft.subject} onInput={(event) => { const field = event.currentTarget; field.style.height = 'auto'; field.style.height = `${field.scrollHeight}px` }} onChange={(event) => { session.edit({ subject: event.target.value }); schedule() }} aria-label="Assunto da newsletter" /></div><div className="editor-heading-actions"><Button className="editor-save-sync-button" icon={<span className="editor-save-sync-icon"><Save size={15} /><UploadCloud size={14} /></span>} onClick={() => void sync()} disabled={busy || !integration?.connected}>{busy ? 'Salvando…' : 'Preparar edição'}</Button><Button variant="outline" onClick={() => openDelivery('test')}>Enviar teste</Button><Button variant="outline" onClick={() => openDelivery('campaign')}>Enviar campanha</Button></div></div>
     {(!integration?.connected || !integration.cloud) && <p className="editor-demo-note">{!integration?.connected ? integration?.demo ? 'Demonstração identificada. A sincronização com Buttondown e D1 não está disponível.' : integration?.reason || 'Sem conexão confirmada com a Buttondown. O conteúdo continua salvo neste navegador.' : 'A recuperação entre dispositivos está indisponível. O conteúdo será salvo neste dispositivo.'}</p>}
     {(error || session.error || coordinator?.error) && <div className="editor-inline-error" role="alert">{error || session.error || coordinator?.error}<button onClick={() => { setError(''); session.clearError() }} aria-label="Fechar aviso">×</button></div>}
     {notice && <div className="editor-inline-success" role="status">{notice}</div>}
     {remoteCopy && <div className="editor-demo-note"><span>Há uma versão mais recente na nuvem. Sua cópia local está preservada.</span><Button size="sm" onClick={() => run(() => { downloadRecord(session.value); const remote = { ...remoteCopy, revision: Math.max(draft.revision || 0, remoteCopy.revision || 0) + 1 }; writeDraft(remote, readDrafts().find((item) => item.id === remote.id) || null); install(remote); setRemoteCopy(null) })}>Exportar esta cópia e abrir a versão da nuvem</Button></div>}
-    <div className={`editor-workbench${toolsOpen ? '' : ' tools-closed'}`}>
+    {stage === 'preview' && <section className="editor-stage-page"><p className="eyebrow">ETAPA 02 · PRÉVIA</p><h1>Revise antes de enviar</h1><p className="editor-preview-subject"><strong>Assunto:</strong> {draft.subject}</p><label className="editor-preview-source">Versão que será revisada<select aria-label="Fonte da prévia" value={previewKind} onChange={event => setPreviewKind(event.target.value as 'original' | 'compatible')}><option value="original">HTML original exportado</option><option value="compatible">Fragmento compatível enviado à Buttondown</option></select></label>{contentQuality(html).map(warning => <p role="status" key={warning}>{warning}</p>)}<div className="editor-stage-actions"><Button variant="outline" onClick={returnToEdit}>Voltar à edição</Button><Button onClick={() => openDelivery('campaign')}>Continuar para envio</Button></div><iframe title="Prévia da edição" sandbox="" referrerPolicy="no-referrer" srcDoc={previewKind === 'original' ? html : compatibleEmailBody(html)} /><p className="editor-preview-note">Prévia simulada do HTML exportado. Gmail e Outlook podem alterar fontes e espaçamento. O rodapé de descadastro é acrescentado pela Buttondown.</p>{draft.buttondownId ? <a href={`https://buttondown.com/emails/${encodeURIComponent(draft.buttondownId)}`} target="_blank" rel="noopener noreferrer">Conferir resultado processado na Buttondown (última sincronização)</a> : <p>Resultado processado indisponível: este documento ainda não foi sincronizado.</p>}</section>}
+    <section ref={deliveryTools} className="editor-stage-page editor-send-page" hidden={stage !== 'send'}><p className="eyebrow">ETAPA 03 · ENVIO</p><h1>Revise o envio</h1><p>Confira a audiência e o conteúdo. O envio exige confirmação explícita.</p><div className="editor-stage-actions"><Button variant="outline" onClick={() => void openPreview()}>Voltar à prévia</Button><Button variant="quiet" onClick={returnToEdit}>Voltar à edição</Button></div><CampaignDelivery key={`campaign:${draft.id}:${draft.revision}:${draft.cloudRevision}`} draft={draft} /><DeliveryPreparation key={`test:${draft.id}:${draft.revision}:${draft.cloudRevision}`} draft={draft} /></section>
+    <div className={`editor-workbench${toolsOpen ? '' : ' tools-closed'}`} hidden={stage !== 'edit'}>
       <section className="editor-center">
-        <div className="editor-toolbar"><label className="insert-menu">Inserir bloco <select aria-label="Inserir bloco" value="" disabled={preview} onChange={(event) => insert(event.target.value)}><option value="">Escolher…</option><optgroup label="Texto"><option value="paragraph">Parágrafo</option><option value="heading">Título de seção</option><option value="quote">Citação</option></optgroup><optgroup label="Mídia e links"><option value="image">Imagem</option><option value="button">Botão</option></optgroup><optgroup label="Estrutura"><option value="divider">Divisória</option></optgroup></select></label><div className="toolbar-history toolbar-group"><button className="icon-button" aria-label="Desfazer" disabled={preview} onClick={() => editor?.chain().focus().undo().run()}><Undo2 size={16} /></button><button className="icon-button" aria-label="Refazer" disabled={preview} onClick={() => editor?.chain().focus().redo().run()}><Redo2 size={16} /></button></div></div>
-        <div className={`editor-canvas${preview ? ' is-preview' : ''}`}><div className="canvas-ruler"><span>{preview ? 'PRÉVIA DO HTML EXPORTADO' : 'EDIÇÃO EM CURSO'}</span><div className="canvas-view-actions"><button className={!preview ? 'selected' : ''} onClick={() => { previewRequest.current++; setPreviewBusy(false); setPreview(false); requestAnimationFrame(() => { if (editor && previewSelection.current) editor.chain().focus().setTextSelection(previewSelection.current).run(); else editor?.commands.focus() }) }}>Escrever</button><button className={preview ? 'selected' : ''} onClick={() => void openPreview()} disabled={previewBusy}>{previewBusy ? 'Gerando…' : 'Prévia'}</button></div></div>
-          {preview && <><details><summary>Detalhes da sincronização</summary><p>Revisão local {draft.revision || 0} · sincronizada {draft.syncedRevision ?? "nenhuma"} · nuvem {draft.cloudRevision ?? "não salvo"}</p></details>{contentQuality(html).map(warning => <p role="status" key={warning}>{warning}</p>)}<label>Fonte da prévia<select aria-label="Fonte da prévia" value={previewKind} onChange={e => setPreviewKind(e.target.value as 'original' | 'compatible')}><option value="original">HTML original exportado</option><option value="compatible">Fragmento compatível enviado à Buttondown</option></select></label><p>Prévia simulada do HTML do CRM. A moldura {draft.buttondownTemplate === 'modern' ? 'Modern usa o masthead e a data da Buttondown; o CRM omite o cabeçalho próprio para evitar repetição' : 'Classic usa o cabeçalho editorial do CRM'}; o rodapé de descadastro é processado pela Buttondown fora desta tela. Modern também pode exibir seu preâmbulo em inglês. Gmail e Outlook podem alterar fontes, espaçamento e responsividade; esta simulação não substitui testes nesses clientes.</p>{draft.buttondownId ? <a href={`https://buttondown.com/emails/${encodeURIComponent(draft.buttondownId)}`} target="_blank" rel="noopener noreferrer">Conferir resultado processado na Buttondown (última sincronização)</a> : <p>Resultado processado indisponível: este documento ainda não foi sincronizado.</p>}<div className={`email-preview-frame ${device}`}><iframe title="Prévia da newsletter" sandbox="" referrerPolicy="no-referrer" srcDoc={previewKind === 'original' ? html : compatibleEmailBody(html)} /></div><div className="preview-device-controls"><button onClick={() => setDevice('desktop')}><Monitor size={14} />Desktop</button><button onClick={() => setDevice('mobile')}><Smartphone size={14} />Celular</button></div></>}
-          <div className="email-editor-container" style={{ display: preview ? 'none' : undefined }}><EmailEditor key={`${initial.id}:${generation}`} ref={attach} onReady={onReady} onUpdate={onUpdate} content={initial.document || initial.content} extensions={extensions} theme="basic" placeholder="Pressione / para inserir um bloco" /></div>
-        </div>
+        <div className="editor-toolbar"><label className="insert-menu">Inserir bloco <select aria-label="Inserir bloco" value="" onChange={(event) => insert(event.target.value)}><option value="">Escolher…</option><optgroup label="Texto"><option value="paragraph">Parágrafo</option><option value="heading">Título de seção</option><option value="quote">Citação</option></optgroup><optgroup label="Mídia e links"><option value="image">Imagem</option><option value="button">Botão</option></optgroup><optgroup label="Estrutura"><option value="divider">Divisória</option></optgroup></select></label><div className="toolbar-history toolbar-group"><button className="icon-button" aria-label="Desfazer" onClick={() => editor?.chain().focus().undo().run()}><Undo2 size={16} /></button><button className="icon-button" aria-label="Refazer" onClick={() => editor?.chain().focus().redo().run()}><Redo2 size={16} /></button></div></div>
+        <div className="editor-canvas"><div className="canvas-ruler"><span>EDIÇÃO EM CURSO</span></div><div className="email-editor-container"><EmailEditor key={`${initial.id}:${generation}`} ref={attach} onReady={onReady} onUpdate={onUpdate} content={initial.document || initial.content} extensions={extensions} theme="basic" placeholder="Pressione / para inserir um bloco" /></div></div>
         <div className="editor-canvas-footer"><span>Documento editável em JSON · HTML gerado para prévia e Buttondown</span><button className="html-toggle" onClick={() => run(async () => { setHtml(await exportHtml()); setShowHtml((value) => !value) })}>{showHtml ? 'Fechar HTML' : 'Ver HTML'}</button></div>{showHtml && <pre className="html-output">{html}</pre>}
       </section>
       <aside id="editor-inspector" className="editor-inspector" hidden={!toolsOpen}><div className="inspector-title"><div><p className="eyebrow">FERRAMENTAS</p><h2>Composição</h2></div></div>
-        <details className="inspector-section"><summary>Templates</summary><Field label="Ponto de partida"><select value={draft.templateId || ''} disabled={preview || busy} onChange={(event) => setReplacement(event.target.value as NewsletterTemplateId)}><option value="" disabled>Importado / sem template</option>{templates.map((item) => <option value={item.id} key={item.id}>{item.number} · {item.name}</option>)}</select></Field><span className="inspector-hint">A troca pede confirmação e pode ser desfeita.</span></details>
+        <details className="inspector-section"><summary>Templates</summary><Field label="Ponto de partida"><select value={draft.templateId || ''} disabled={busy} onChange={(event) => setReplacement(event.target.value as NewsletterTemplateId)}><option value="" disabled>Importado / sem template</option>{templates.map((item) => <option value={item.id} key={item.id}>{item.number} · {item.name}</option>)}</select></Field><span className="inspector-hint">A troca pede confirmação e pode ser desfeita.</span></details>
         <details className="inspector-section"><summary>Configurações da edição</summary>
-          <Field label="Texto de prévia (preheader)"><input maxLength={200} value={draft.description || ''} disabled={preview || busy} onChange={(event) => { session.edit({ description: event.target.value }); schedule() }} /></Field>
-          <Field label="Data da edição"><input type="date" value={draft.editionDate || ''} disabled={preview || busy} onChange={(event) => { session.edit({ editionDate: event.target.value }); schedule() }} /></Field>
-          <Field label="Template desta edição na Buttondown"><select aria-label="Template desta edição na Buttondown" value={draft.buttondownTemplate || 'classic'} disabled={preview || busy} onChange={(event) => { session.edit({ buttondownTemplate: event.target.value as 'classic' | 'modern' }); schedule() }}><option value="classic">Classic · conteúdo em primeiro plano (recomendado)</option><option value="modern">Modern · masthead e identidade Buttondown</option></select></Field>
+          <Field label="Texto de prévia (preheader)"><input maxLength={200} value={draft.description || ''} disabled={busy} onChange={(event) => { session.edit({ description: event.target.value }); schedule() }} /></Field>
+          <Field label="Data da edição"><input type="date" value={draft.editionDate || ''} disabled={busy} onChange={(event) => { session.edit({ editionDate: event.target.value }); schedule() }} /></Field>
+          <Field label="Template desta edição na Buttondown"><select aria-label="Template desta edição na Buttondown" value={draft.buttondownTemplate || 'classic'} disabled={busy} onChange={(event) => { session.edit({ buttondownTemplate: event.target.value as 'classic' | 'modern' }); schedule() }}><option value="classic">Classic · conteúdo em primeiro plano (recomendado)</option><option value="modern">Modern · masthead e identidade Buttondown</option></select></Field>
           <span className="inspector-hint">A escolha é enviada somente neste rascunho. Classic mantém o conteúdo editorial à frente; Modern acrescenta masthead, assunto, data e um preâmbulo em inglês. A moldura do CRM se ajusta para evitar repetir marca e cabeçalho.</span>
         </details>
-        <section className="inspector-section"><span className="inspector-label">BLOCO SELECIONADO {selected ? `${selected.index + 1} / ${selected.parent.childCount}` : ''}</span><div className="block-actions">{([['up', 'Subir', ArrowUp], ['down', 'Descer', ArrowDown], ['duplicate', 'Duplicar', Copy], ['delete', 'Excluir bloco', Trash2]] as const).map(([action, label, Icon]) => <button key={action} disabled={preview || !editor} onMouseDown={(event) => event.preventDefault()} onClick={() => editor && blockAction(editor, action)}><Icon size={14} />{label}</button>)}</div>
-          {editor && <ol className="block-outline" aria-label="Estrutura da edição">{outline.map((block, index) => <li key={block.position}><button disabled={preview} aria-current={selected?.position === block.position ? 'true' : undefined} onClick={() => editor.chain().focus().setTextSelection(Math.min(block.position + 1, editor.state.doc.content.size)).scrollIntoView().run()}>{index + 1}. {block.label}</button></li>)}</ol>}
+        <section className="inspector-section"><span className="inspector-label">BLOCO SELECIONADO {selected ? `${selected.index + 1} / ${selected.parent.childCount}` : ''}</span><div className="block-actions">{([['up', 'Subir', ArrowUp], ['down', 'Descer', ArrowDown], ['duplicate', 'Duplicar', Copy], ['delete', 'Excluir bloco', Trash2]] as const).map(([action, label, Icon]) => <button key={action} disabled={!editor} onMouseDown={(event) => event.preventDefault()} onClick={() => editor && blockAction(editor, action)}><Icon size={14} />{label}</button>)}</div>
+          {editor && <ol className="block-outline" aria-label="Estrutura da edição">{outline.map((block, index) => <li key={block.position}><button aria-current={selected?.position === block.position ? 'true' : undefined} onClick={() => editor.chain().focus().setTextSelection(Math.min(block.position + 1, editor.state.doc.content.size)).scrollIntoView().run()}>{index + 1}. {block.label}</button></li>)}</ol>}
         </section>
-        {editor && <MediaControls editor={editor} connected={Boolean(integration?.connected)} disabled={preview || busy} upload={uploadImage} onError={setError} />}
-        <details className="inspector-section" ref={deliveryTools}><summary>Ferramentas de envio e homologação</summary><CampaignDelivery key={`campaign:${draft.id}:${draft.revision}:${draft.cloudRevision}`} draft={draft} />
-        <DeliveryPreparation key={`test:${draft.id}:${draft.revision}:${draft.cloudRevision}`} draft={draft} /></details>
+        {editor && <MediaControls editor={editor} connected={Boolean(integration?.connected)} disabled={busy} upload={uploadImage} onError={setError} />}
         <details className="inspector-section"><summary>Exportação e recuperação</summary><Button size="sm" variant="outline" disabled={!integration?.cloud || busy} onClick={() => run(async () => { setRemoteCopy(await api.cloudDraft(draft.id)) })}>Conferir versão recuperável</Button><Button size="sm" variant="outline" onClick={() => downloadRecord({ ...session.value, document: ref.current?.getJSON() || session.value.document })}>Exportar documento</Button><Button size="sm" variant="outline" disabled={busy} onClick={() => run(async () => { await persistence.current?.reconnect(); await persistence.current?.flush(true) })}>Tentar preparar novamente</Button><span className="inspector-hint">{integration?.cloud ? `Última cópia na nuvem: ${dateLabel(draft.lastCloudSavedAt)}${draft.lastCloudSavedAt && draft.cloudSavedRevision !== draft.revision ? ' · há alterações posteriores' : ''}` : 'Recuperação entre dispositivos exige o banco editorial configurado. A cópia deste navegador continua disponível.'}</span></details>
         <p className="inspector-hint">Envios reais exigem ativação explícita no servidor e permissão de envio na Buttondown. A configuração atual permanece fechada por padrão.</p>
       </aside>
