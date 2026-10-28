@@ -10,12 +10,14 @@ export const onRequestGet = ({ env }: { env: AppEnv }) => json({ enabled: env.ED
 export async function onRequestPost({ request, env }: { request: Request; env: AppEnv }) {
   try {
     if (env.EDITORIAL_TEST_ENABLED !== 'true') return json({ error: 'Homologação desativada pelo proprietário.' }, 403)
-    const input = await parseJson(request, 4096) as Record<string, unknown>
+    const raw = await parseJson(request, 4096)
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return json({ error: 'Solicitação inválida.' }, 400)
+    const input = raw as Record<string, unknown>
     if (Object.keys(input).some(k => !['draftId', 'cloudRevision', 'recipientIndex', 'attemptId', 'confirm'].includes(k))) return json({ error: 'Campos não permitidos.' }, 400)
-    if (typeof input.draftId !== 'string' || !validId(input.draftId) || !Number.isInteger(input.cloudRevision)) return json({ error: 'Documento inválido.' }, 400)
+    if (typeof input.draftId !== 'string' || !validId(input.draftId) || !Number.isSafeInteger(input.cloudRevision) || Number(input.cloudRevision) < 1) return json({ error: 'Documento inválido.' }, 400)
     const draft = await getDocument(env, 'draft', input.draftId)
     if (typeof draft.subject !== 'string' || !/^HOMOLOGA[CÇ][AÃ]O\b/i.test(draft.subject)) return json({ error: 'Identifique o assunto com HOMOLOGAÇÃO antes de preparar um teste.' }, 400)
-    if (!draft.document || !draft.buttondownId || !validId(draft.buttondownId) || draft.cloudRevision !== input.cloudRevision || draft.revision !== draft.syncedRevision) return json({ error: 'Salve no D1 e sincronize a revisão atual antes do teste.' }, 409)
+    if (!draft.document || !draft.buttondownId || !validId(draft.buttondownId) || draft.cloudRevision !== input.cloudRevision || !Number.isSafeInteger(draft.revision) || draft.revision < 0 || draft.revision !== draft.syncedRevision) return json({ error: 'Salve no D1 e sincronize a revisão atual antes do teste.' }, 409)
     const db = database(env)
     const campaign = await buttondown({ request, env }, `/emails/${draft.buttondownId}`) as { status: string; body: string; subject: string }
     if (campaign.status !== 'draft' || typeof campaign.body !== 'string' || campaign.subject !== draft.subject) return json({ error: 'Campanha remota divergente ou fora de draft.' }, 409)

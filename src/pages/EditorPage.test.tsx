@@ -16,7 +16,7 @@ vi.mock('@react-email/editor', async () => {
       const handle = useMemo(() => {
         const block = { nodeSize: body.length + 2, textContent: body, type: { name: 'paragraph' }, isBlock: true }
         const doc = { childCount: 1, child: () => block, content: { size: body.length + 2 }, descendants: (visit: (node: typeof block, position: number) => void) => visit(block, 0) }
-        return { editor: { view: { dom: document.createElement('div'), hasFocus: () => false }, schema: { nodes: { doc: { spec: {} }, paragraph: { spec: {} }, text: { spec: {} } }, marks: {} }, commands: { focus: () => {} }, on: () => {}, off: () => {}, isActive: () => false, getAttributes: () => ({}), state: { selection: { from: 1, node: block, $from: { parent: doc, index: () => 0 } }, doc } }, getEmailHTML: async () => body, getJSON: () => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: body }] }] }) }
+        const chain = { setTextSelection: () => chain, focus: () => chain, run: () => true }; return { editor: { chain: () => chain, view: { dom: document.createElement('div'), hasFocus: () => false }, schema: { nodes: { doc: { spec: {} }, paragraph: { spec: {} }, text: { spec: {} } }, marks: {} }, commands: { focus: () => {} }, on: () => {}, off: () => {}, isActive: () => false, getAttributes: () => ({}), state: { selection: { from: 1, to: 1, node: block, $from: { parent: doc, index: () => 0 } }, doc } }, getEmailHTML: async () => body, getJSON: () => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: body }] }] }) }
       }, [body])
       useImperativeHandle(ref, () => handle, [handle])
       useEffect(() => onReady(handle), [handle, onReady])

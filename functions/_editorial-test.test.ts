@@ -31,3 +31,14 @@ it('resultado incerto não permite novo envio da mesma tentativa', async () => {
   expect((await run({ attemptId: 'test', confirm: true })).status).toBe(502)
   expect((await run({ attemptId: 'test', confirm: true })).status).toBe(409)
 })
+it('requisições concorrentes reclamam a tentativa uma única vez', async () => {
+  const run = setup()
+  const responses = await Promise.all([run({ attemptId: 'same', confirm: true }), run({ attemptId: 'same', confirm: true })])
+  expect(responses.map(r => r.status).sort()).toEqual([200, 409])
+  expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/send-draft'))).toHaveLength(1)
+})
+it('bloqueia allowlist vazia ou índice inexistente sem enviar', async () => {
+  const run = setup({ EDITORIAL_TEST_RECIPIENTS: '' })
+  expect((await run({ recipientIndex: 0 })).status).toBe(403)
+  expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/send-draft'))).toHaveLength(0)
+})

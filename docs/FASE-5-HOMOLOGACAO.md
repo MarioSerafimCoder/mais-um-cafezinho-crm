@@ -49,3 +49,15 @@ No Free, a moldura externa e os estilos adicionados pela Buttondown permanecem f
 | Edição especial | passou | pendente |
 
 Portanto, a preparação técnica local está validada por mocks e navegador, mas a homologação editorial remota não está concluída. O ciclo completo D1 → Buttondown → outro navegador → atualização do mesmo ID deve ser registrado em produção com rascunhos de teste antes de autorizar mensagens reais.
+
+## Revisão para integração — 28/10/2026
+
+Branch de revisão: `phase-5-editorial-homologation`, baseada em `origin/main` no commit `32d15d2`. Não integrar automaticamente: a main dispara deploy de produção pelo Pages.
+
+A migração 0002 é aditiva (tabela privada e índice único); não remove nem altera documentos existentes. O índice impede duas preparações para o mesmo documento/revisão D1/destino. A reclamação condicional de estado e revisão impede dois POSTs concorrentes de chamar send-draft. Testes com mocks exercitam concorrência e timeout; não são evidência de envio real. O middleware Access e a recusa de hosts alternativos permanecem aplicáveis à nova rota. Não foi configurada a flag nem alterada a chave. A ausência de flag no código resulta em recusa antes de D1 ou Buttondown.
+
+A revisão acrescentou recusa explícita a corpo JSON nulo/array e a revisões ausentes, negativas ou não inteiras. Também corrigiu a restauração explícita da seleção ao sair da prévia, após a bateria detectar que o foco simples podia perder o intervalo selecionado. O mock do editor acompanha a API de seleção agora usada.
+
+Sequência para futura implantação: revisar PR e evidências remotas; conferir bindings de produção e flag ausente/false; autorizar e aplicar somente a migração aditiva no banco editorial correto; integrar main (isso publica automaticamente); verificar GET do endpoint com sessão e recusa POST sem habilitação. Não habilitar testes, cadastrar destinos ou ampliar permissões como parte do deploy. Uma autorização separada será necessária para qualquer mensagem real.
+
+O inventário de navegador desta execução retornou bloqueio por configuração local do Work. A homologação remota aguarda liberação e sessões autenticadas; nenhuma credencial foi extraída nem foi contornada essa restrição. O estado atual de bindings/deploy remoto não foi revalidado e não deve ser inferido apenas dos documentos anteriores.

@@ -1,7 +1,7 @@
 name: Verificar CRM
 on:
   push:
-    branches: [main, phase-2-editor-stability]
+    branches: [main, phase-2-editor-stability, phase-5-editorial-homologation]
   pull_request:
 permissions:
   contents: read
