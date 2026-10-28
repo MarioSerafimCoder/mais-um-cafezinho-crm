@@ -31,6 +31,8 @@ Um rascunho separado foi criado para comparação: [Fase 4 — não enviar](http
 
 A prévia processada mostrou títulos, citação, imagem com alt, assinatura, Portfólio/Blog e descadastro resolvido, sem o aviso de conversão Fancy. O cabeçalho, rodapé e parâmetros de rastreamento da Buttondown continuaram presentes. A mudança evita a reedição destrutiva por Fancy; **não elimina a moldura externa nem promete fidelidade pixel a pixel**. Evidência local ignorada no Git: `logs/phase4-markdown.jpg`.
 
+Depois do deploy, a sincronização real pelo CRM criou o rascunho separado `em_0has1ph97k84stxhmcpbjcyv04`, a partir do documento `local-1bd84c0e-1d11-4fba-919b-a8cec13f4c61`, com a imagem enviada por arquivo. A leitura pela API real confirmou `status: draft`, marcador `plaintext`, ausência de `head`, URL da imagem, alt e token de descadastro preservados. A nova seleção de prévias foi conferida em produção; evidência `logs/phase4-preview.jpg`.
+
 ## Upload independente da extensão
 
 Upload real pelo navegador interno autenticado em produção, usando o seletor normal de arquivos e a rota `/api/images`, sem a extensão Chrome:
