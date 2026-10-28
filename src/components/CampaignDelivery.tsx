@@ -7,7 +7,7 @@ import { Button } from './ui'
 const pageSize = 25
 type ActivePages = { regular: ApiPage<Subscriber>; premium: ApiPage<Subscriber> }
 
-export function CampaignDelivery({ draft }: { draft: DraftRecord }) {
+export function CampaignDelivery({ draft, onPrepare }: { draft: DraftRecord; onPrepare?: () => Promise<DraftRecord> }) {
   const [enabled, setEnabled] = useState<boolean | null>(null)
   const [activeCount, setActiveCount] = useState<number | null>(null)
   const [selectedLimit, setSelectedLimit] = useState(500)
@@ -81,13 +81,15 @@ export function CampaignDelivery({ draft }: { draft: DraftRecord }) {
   }
 
   const prepare = async () => {
-    if (!draft.buttondownId || !draft.cloudRevision) return
+    if (!current && !onPrepare) return
     setBusy(true); setError(''); setMessage(''); setConfirmed(false)
     try {
+      const latest = onPrepare ? await onPrepare() : draft
+      if (!latest.buttondownId || !latest.cloudRevision || latest.revision !== latest.syncedRevision || latest.revision !== latest.cloudSavedRevision) throw new Error('Não foi possível sincronizar a revisão atual. Confira a conexão e tente novamente.')
       const audience = mode === 'all_active'
         ? { mode: 'all_active' }
         : { mode: 'selected', subscriberIds: selectedRows.map((subscriber) => subscriber.id) }
-      const result = await api.campaignDelivery({ action: 'prepare', draftId: draft.id, cloudRevision: draft.cloudRevision, audience })
+      const result = await api.campaignDelivery({ action: 'prepare', draftId: latest.id, cloudRevision: latest.cloudRevision, audience })
       if (!result.attemptId || !result.audienceMode || !result.recipientCount || !result.cloudRevision || !result.subject || !result.expiresAt) throw new Error('A Buttondown não retornou uma preparação válida.')
       setPrepared(result as PreparedCampaignDelivery)
       setMessage('Prévia pronta. Confira a audiência e confirme somente se estiver correta.')
@@ -169,8 +171,8 @@ export function CampaignDelivery({ draft }: { draft: DraftRecord }) {
         <div className="delivery-contact-pagination"><span>Página {page} de {totalPages}</span><div><button type="button" disabled={page <= 1 || loadingContacts || Boolean(prepared)} onClick={() => setPage((value) => Math.max(1, value - 1))}>Anterior</button><button type="button" disabled={page >= totalPages || loadingContacts || Boolean(prepared)} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Próxima</button></div></div>
         {selectedRows.length > 0 && <div className="delivery-selected-list"><strong>Selecionados ({selectedRows.length}/{selectedLimit})</strong>{selectedRows.map((contact) => <span key={contact.id}>{contact.email_address}</span>)}</div>}
       </div>}
-      {!prepared && <Button className="campaign-prepare-button" size="sm" icon={<Eye size={15} />} disabled={busy || !current || audienceCount < 1 || (mode === 'selected' && !selectedRows.length)} onClick={() => void prepare()}>{busy ? 'Preparando prévia…' : 'Revisar prévia e contagem'}</Button>}
-      {!current && <p className="inspector-hint">Salve o rascunho no D1 e sincronize a revisão atual na Buttondown antes de preparar o envio.</p>}
+      {!prepared && <Button className="campaign-prepare-button" size="sm" icon={<Eye size={15} />} disabled={busy || (!current && !onPrepare) || audienceCount < 1 || (mode === 'selected' && !selectedRows.length)} onClick={() => void prepare()}>{busy ? 'Salvando e preparando…' : 'Revisar prévia e contagem'}</Button>}
+      {!current && <p className="inspector-hint">{onPrepare ? 'A edição será salva e sincronizada automaticamente antes da prévia.' : 'Salve o rascunho no D1 e sincronize a revisão atual na Buttondown antes de preparar o envio.'}</p>}
       {prepared && <div className="campaign-delivery-preview">
         <span className="inspector-label">PRÉVIA · REVISÃO D1 {prepared.cloudRevision}</span>
         <p><strong>Assunto:</strong> {prepared.subject}</p>

@@ -30,12 +30,12 @@ function attemptLabel(attempt: Attempt) {
   return labels[attempt.state] || attempt.state
 }
 
-export function DeliveryPreparation({ draft }: { draft?: DraftRecord }) {
+export function DeliveryPreparation({ draft, onPrepare }: { draft?: DraftRecord; onPrepare?: () => Promise<DraftRecord> }) {
   const [config, setConfig] = useState<Config | null>(null)
   const [index, setIndex] = useState('0')
   const [attempt, setAttempt] = useState<PreparedAttempt | null>(null)
   const [confirmed, setConfirmed] = useState(false)
-  const [message, setMessage] = useState('Salve e sincronize a newsletter para liberar a preparação do teste.')
+  const [message, setMessage] = useState('Atualize o destinatário e confira o histórico antes de preparar o teste.')
   const [busy, setBusy] = useState(false)
   const run = async (action: () => Promise<void>) => {
     setBusy(true)
@@ -89,18 +89,20 @@ export function DeliveryPreparation({ draft }: { draft?: DraftRecord }) {
     {config && !config.enabled && <div className="test-feedback test-feedback-warning" role="status"><AlertCircle size={16} />Teste indisponível ou sem destinatários autorizados.</div>}
     {config?.enabled && <>
       <label className="test-recipient-field"><span>Destinatário autorizado</span><select disabled={busy || Boolean(attempt)} value={index} onChange={event => { setIndex(event.target.value); setConfirmed(false) }}>{config.recipients.map((email, i) => <option value={i} key={email}>{email}</option>)}</select></label>
-      {!ready && <div className="test-feedback test-feedback-warning" role="status"><Info size={16} />Salve e sincronize a revisão atual da newsletter antes de preparar o teste.</div>}
+      {!ready && <div className={`test-feedback ${onPrepare ? 'test-feedback-neutral' : 'test-feedback-warning'}`} role="status"><Info size={16} />{onPrepare ? 'A edição será salva e sincronizada automaticamente ao preparar o teste.' : 'Salve e sincronize a revisão atual da newsletter antes de preparar o teste.'}</div>}
 
-      {!attempt && <Button className="test-action-button" variant="outline" icon={<Mail size={15} />} disabled={busy || !ready || !config.recipients.length} onClick={() => void run(async () => {
+      {!attempt && <Button className="test-action-button" variant="outline" icon={<Mail size={15} />} disabled={busy || (!ready && !onPrepare) || !config.recipients.length} onClick={() => void run(async () => {
         try {
-          const prepared = await call({ draftId: draft?.id, cloudRevision: draft?.cloudRevision, recipientIndex: Number(index) })
+          const latest = ready ? draft : await onPrepare?.()
+          if (!latest?.buttondownId || !latest.cloudRevision || latest.revision !== latest.syncedRevision || latest.revision !== latest.cloudSavedRevision) throw new Error('Não foi possível sincronizar a revisão atual. Confira a conexão e tente novamente.')
+          const prepared = await call({ draftId: latest.id, cloudRevision: latest.cloudRevision, recipientIndex: Number(index) })
           setAttempt(prepared)
           setMessage('Preparação registrada. Confira o destinatário e confirme somente se estiver correto.')
         } catch (error) {
           await refreshConfig()
           if (!(error instanceof Error) || !error.message.includes('preparação ativa')) throw error
         }
-      })}>Preparar novo teste</Button>}
+      })}>{busy ? 'Salvando e preparando…' : 'Preparar novo teste'}</Button>}
 
       {attempt && <div className="test-confirmation-card">
         <div className="test-confirmation-heading"><ShieldCheck size={16} /><strong>Revise antes de enviar</strong></div>

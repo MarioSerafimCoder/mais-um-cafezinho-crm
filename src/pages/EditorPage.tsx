@@ -239,6 +239,18 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
       await openPreview()
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível preparar a edição.') }
   }
+  const syncForDelivery = async (): Promise<DraftRecord> => {
+    const queue = persistence.current
+    if (!queue) throw new Error('Aguarde o editor terminar de carregar antes de preparar o envio.')
+    for (let attempt = 0; attempt < 3; attempt++) {
+      saveLocal()
+      await queue.flush(true)
+      const latest = sessionRef.current?.value
+      if (latest?.buttondownId && latest.cloudRevision && Number.isSafeInteger(latest.revision)
+        && latest.revision === latest.syncedRevision && latest.revision === latest.cloudSavedRevision) return structuredClone(latest)
+    }
+    throw new Error('A edição mudou durante a sincronização. Tente preparar novamente.')
+  }
 
   const uploadImage = useCallback(async (file: File) => {
     try { return await api.uploadImage(file) }
@@ -289,7 +301,7 @@ function EditorWorkspace({ routeId, templateId }: { routeId: string; templateId:
     {notice && <div className="editor-inline-success" role="status">{notice}</div>}
     {remoteCopy && <div className="editor-demo-note"><span>Há uma versão mais recente na nuvem. Sua cópia local está preservada.</span><Button size="sm" onClick={() => run(() => { downloadRecord(session.value); const remote = { ...remoteCopy, revision: Math.max(draft.revision || 0, remoteCopy.revision || 0) + 1 }; writeDraft(remote, readDrafts().find((item) => item.id === remote.id) || null); install(remote); setRemoteCopy(null) })}>Exportar esta cópia e abrir a versão da nuvem</Button></div>}
     {stage === 'preview' && <section className="editor-stage-page"><p className="eyebrow">ETAPA 02 · PRÉVIA</p><h1>Revise antes de enviar</h1><p className="editor-preview-subject"><strong>Assunto:</strong> {draft.subject}</p><label className="editor-preview-source">Versão que será revisada<select aria-label="Fonte da prévia" value={previewKind} onChange={event => setPreviewKind(event.target.value as 'original' | 'compatible')}><option value="original">HTML original exportado</option><option value="compatible">Fragmento compatível enviado à Buttondown</option></select></label>{contentQuality(html).map(warning => <p role="status" key={warning}>{warning}</p>)}<div className="editor-stage-actions"><Button variant="outline" onClick={returnToEdit}>Voltar à edição</Button><Button onClick={() => openDelivery('campaign')}>Continuar para envio</Button></div><iframe title="Prévia da edição" sandbox="" referrerPolicy="no-referrer" srcDoc={previewKind === 'original' ? html : compatibleEmailBody(html)} /><p className="editor-preview-note">Prévia simulada do HTML exportado. Gmail e Outlook podem alterar fontes e espaçamento. O rodapé de descadastro é acrescentado pela Buttondown.</p>{draft.buttondownId ? <a href={`https://buttondown.com/emails/${encodeURIComponent(draft.buttondownId)}`} target="_blank" rel="noopener noreferrer">Conferir resultado processado na Buttondown (última sincronização)</a> : <p>Resultado processado indisponível: este documento ainda não foi sincronizado.</p>}</section>}
-    <section ref={deliveryTools} className="editor-stage-page editor-send-page" hidden={stage !== 'send'}><p className="eyebrow">ETAPA 03 · ENVIO</p><h1>Revise o envio</h1><p>Confira a audiência e o conteúdo. O envio exige confirmação explícita.</p><div className="editor-stage-actions"><Button variant="outline" onClick={() => void openPreview()}>Voltar à prévia</Button><Button variant="quiet" onClick={returnToEdit}>Voltar à edição</Button></div><CampaignDelivery key={`campaign:${draft.id}:${draft.revision}:${draft.cloudRevision}`} draft={draft} /><DeliveryPreparation key={`test:${draft.id}:${draft.revision}:${draft.cloudRevision}`} draft={draft} /></section>
+    {stage === 'send' && <section ref={deliveryTools} className="editor-stage-page editor-send-page"><p className="eyebrow">ETAPA 03 · ENVIO</p><h1>Revise o envio</h1><p>Confira a audiência e o conteúdo. O envio exige confirmação explícita.</p><div className="editor-stage-actions"><Button variant="outline" onClick={() => void openPreview()}>Voltar à prévia</Button><Button variant="quiet" onClick={returnToEdit}>Voltar à edição</Button></div><CampaignDelivery key={draft.id} draft={draft} onPrepare={syncForDelivery} /><DeliveryPreparation key={draft.id} draft={draft} onPrepare={syncForDelivery} /></section>}
     <div className={`editor-workbench${toolsOpen ? '' : ' tools-closed'}`} hidden={stage !== 'edit'}>
       <section className="editor-center">
         <div className="editor-toolbar"><label className="insert-menu">Inserir bloco <select aria-label="Inserir bloco" value="" onChange={(event) => insert(event.target.value)}><option value="">Escolher…</option><optgroup label="Texto"><option value="paragraph">Parágrafo</option><option value="heading">Título de seção</option><option value="quote">Citação</option></optgroup><optgroup label="Mídia e links"><option value="image">Imagem</option><option value="button">Botão</option></optgroup><optgroup label="Estrutura"><option value="divider">Divisória</option></optgroup></select></label><div className="toolbar-history toolbar-group"><button className="icon-button" aria-label="Desfazer" onClick={() => editor?.chain().focus().undo().run()}><Undo2 size={16} /></button><button className="icon-button" aria-label="Refazer" onClick={() => editor?.chain().focus().redo().run()}><Redo2 size={16} /></button></div></div>
