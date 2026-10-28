@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { afterEach, expect, it, vi } from 'vitest'
 import { onRequestGet, onRequestPost } from './api/editorial-test'
-import { onRequestPost as campaignPost } from './api/campaign-delivery'
+import { onRequestGet as campaignGet, onRequestPost as campaignPost } from './api/campaign-delivery'
 import type { AppEnv } from './_utils'
 
 const databases: DatabaseSync[] = []
@@ -71,8 +71,16 @@ it('conteúdo remoto alterado impede envio mesmo com revisão local igual', asyn
   expect((await post({ attemptId: first.attemptId, confirm: true })).status).toBe(409)
   expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/send-draft'))).toHaveLength(0)
 })
-it('campanhas permanecem bloqueadas mesmo com teste configurado', async () => {
+it('bloqueia campanhas quando a flag do servidor não está ativa', async () => {
   const { env } = setup()
   const response = await campaignPost({ env, request: new Request('https://example.com/api/campaign-delivery', { method: 'POST', body: JSON.stringify({ action: 'confirm', confirm: true }) }) })
   expect(response.status).toBe(403); expect(fetch).not.toHaveBeenCalled()
+})
+it('habilita o painel de campanhas apenas com a flag explícita', async () => {
+  const { env } = setup()
+  env.CAMPAIGN_SENDING_ENABLED = 'true'
+  vi.mocked(fetch).mockImplementation(async () => Response.json({ count: 6, results: [] }))
+  const response = await campaignGet({ env, request: new Request('https://example.com/api/campaign-delivery') })
+  expect(await response.json()).toEqual({ enabled: true, activeCount: 12, selectedLimit: 500 })
+  expect(fetch).toHaveBeenCalledTimes(2)
 })
