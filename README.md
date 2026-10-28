@@ -13,7 +13,7 @@ Um painel editorial em português para organizar assinantes, preparar campanhas 
 
 ## Tecnologias
 
-React, TypeScript, Vite, Tailwind CSS 4, React Email Editor, Cloudflare Pages Functions e Buttondown API (`2026-04-01`). Não há banco de dados: rascunhos offline ficam no `localStorage` do navegador.
+React, TypeScript, Vite, Tailwind CSS 4, React Email Editor, Cloudflare Pages Functions, Cloudflare D1 e Buttondown API (`2026-04-01`). O D1 guarda documentos estruturados e configurações editoriais; as cópias offline ficam no `localStorage`. A Buttondown continua como fonte oficial de campanhas e assinantes.
 
 ## Rodar localmente
 
@@ -44,9 +44,11 @@ pnpm pages:local
 
 O ambiente completo abre em `http://127.0.0.1:8788`. Para desenvolvimento com atualização automática da interface, mantenha esse servidor e execute `pnpm dev:api` em outro terminal. O bypass exige simultaneamente host de loopback, `ENVIRONMENT=development` e `LOCAL_ACCESS_BYPASS=true`; nunca funciona no domínio de produção.
 
-## Fase 2 — auditoria e estabilização local
+## Fase 2 — auditoria e estabilização
 
-As alterações desta fase estão na branch local `phase-2-editor-stability`, sem publicação ou alteração de DNS. Veja [o relatório de auditoria](docs/FASE-2-AUDITORIA.md). O editor mantém o documento estruturado como fonte de edição e gera HTML para a prévia/rascunho Buttondown. Rascunhos antigos conservam o HTML original e recebem backup antes da migração. A recuperação por D1 está implementada e testada localmente; o banco ainda precisa ser configurado em produção numa etapa futura autorizada.
+As alterações de `phase-2-editor-stability` foram enviadas ao GitHub, integradas à `main` e publicadas. O D1 remoto está configurado, com migração aplicada e recuperação de um documento comprovada entre o navegador do ChatGPT e o Chrome. O editor mantém JSON como fonte de edição e gera HTML para prévia e Buttondown; os rascunhos legados conservam o original e recebem backup. Veja [a auditoria](docs/FASE-2-AUDITORIA.md) e [a homologação real de produção](docs/HOMOLOGACAO-PRODUCAO.md).
+
+Um rascunho real foi criado na Buttondown sem envio. O HTML retornado pela API correspondeu ao exportado pelo CRM; a prévia da Buttondown acrescenta seu cabeçalho/rodapé e avisa que a conversão para o editor Fancy não é integral. Evite reeditar esse HTML no Fancy até revisar essa limitação.
 
 ## Configuração de produção
 
@@ -57,6 +59,7 @@ Destino de produção: `https://crm.marioserafim.com.br`. O projeto usa Cloudfla
 3. Configure `CF_ACCESS_TEAM_DOMAIN` (por exemplo, `sua-equipe.cloudflareaccess.com`) e `CF_ACCESS_AUD` para validar os tokens do Cloudflare Access.
 4. Proteja todas as rotas da aplicação com uma aplicação self-hosted do Cloudflare Access. Sem um JWT Access válido, as Functions recusam as chamadas.
 5. Configure a chave da Buttondown com apenas `subscriber_access: read`, `email_access: write` e `sending_access: none`.
+6. O binding `DB`, exclusivo de `env.production` em `wrangler.toml`, aponta para `mais-um-cafezinho-editorial`. Migrações remotas são explícitas: `pnpm db:production`. Confira o banco e as migrações pendentes antes de executar; nunca use esse comando para testes locais.
 
 O middleware bloqueia os aliases `pages.dev` e previews. Sem configuração válida do Access, o painel e as APIs permanecem bloqueados. O bypass local só funciona em endereços de loopback.
 

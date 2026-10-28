@@ -4,6 +4,8 @@ Destino exclusivo: https://crm.marioserafim.com.br.
 Projeto Pages: `mais-um-cafezinho-crm`, conta `7bfc908c25ef636aade196a09572a11c`.
 Repositório: `MarioSerafimCoder/mais-um-cafezinho-crm`, produção em `main`.
 
+Estado atual em 28/10/2026: a fase 2 está na `main` e publicada; o D1 editorial remoto está vinculado e migrado. A recuperação entre navegadores e um rascunho real na Buttondown foram conferidos. Consulte [a homologação de produção](HOMOLOGACAO-PRODUCAO.md), incluindo a limitação de conversão do HTML no editor Fancy.
+
 ## Build e deploy
 
 - Integração GitHub nativa do Pages, deploy de produção automático para novos commits em `main`.
@@ -37,7 +39,13 @@ O backend valida assinatura RS256, expiração, emissor e audience com as chaves
 
 No Pages → Settings → Variables and Secrets, criar **Secret** `BUTTONDOWN_API_KEY`, exclusivamente para este projeto. Usar a chave existente de menor privilégio: `subscriber_access: read`, `email_access: write`, `sending_access: none`. Nunca adicionar o segredo ao Git, ao workflow ou a variáveis `VITE_*`. Não ativar envio.
 
-Depois de publicar, entrar pelo Access e consultar `/api/status` e `/api/subscribers?page=1`. O status só indica que a chave está configurada; uma resposta bem-sucedida de subscribers confirma a comunicação com a Buttondown. Sem chave, a interface pode mostrar demonstração e APIs de dados retornam erro de integração.
+Depois de publicar, entrar pelo Access e consultar `/api/status` e `/api/subscribers?page=1`. O status distingue `configured` de `connected`, realizando uma consulta real à Buttondown, e informa `cloud` para o binding D1. Sem chave ou conexão, produção mostra indisponibilidade; demonstração exige ambiente local e flag explícita.
+
+## D1 editorial
+
+Banco: `mais-um-cafezinho-editorial`, id `4460ef9d-fb2b-4756-aa00-37fb0b80d056`, região WEUR. O binding `DB` está em `env.production` no `wrangler.toml`; os parâmetros públicos do Access estão repetidos nesse ambiente porque `vars` não é herdado. Secrets continuam no Pages.
+
+A migração `0001_editorial_documents.sql` foi aplicada e não há migrações pendentes. Antes de novas migrações, confira o banco pelo nome e a lista com `pnpm exec wrangler d1 migrations list mais-um-cafezinho-editorial --remote --config wrangler.toml --env production`. O comando explícito de aplicação é `pnpm db:production`. As migrações atuais criam apenas documentos editoriais e configurações, sem tabela de assinantes. Para mudanças destrutivas futuras, planeje backup e recuperação antes da aplicação.
 
 ## Validação
 
@@ -52,7 +60,8 @@ pnpm exec wrangler pages functions build --outdir .wrangler/functions-check
 Para validar as Functions sem credenciais reais, localmente:
 
 ```sh
-pnpm pages:dev --ip 127.0.0.1 --port 8788 --binding LOCAL_ACCESS_BYPASS=true
+pnpm db:local
+pnpm pages:local
 ```
 
 Sem o binding, o ambiente local também falha fechado. O Vite (`pnpm dev`) usa demonstração e não exercita o middleware.
@@ -61,9 +70,9 @@ Em produção, testar sem sessão: `/`, `/campaigns`, `/editor/new`, `/subscribe
 
 ## Preservação dos rascunhos
 
-Não há banco próprio. Os rascunhos locais continuam na chave `mais-um-cafezinho:drafts:v1` do navegador e da origem original. Não limpar dados do navegador. A mudança de `http://127.0.0.1:5173` para o domínio de produção não migra esses dados automaticamente. Os rascunhos remotos permanecem na Buttondown e dependem da mesma conta/chave para serem consultados. Não houve envio, exclusão ou migração de rascunhos nesta publicação.
+O D1 guarda cópias estruturadas explicitamente salvas; a Buttondown mantém as campanhas oficiais. Os rascunhos locais continuam na chave `mais-um-cafezinho:drafts:v1` do navegador e da origem original. A mudança de localhost para produção não transfere o `localStorage`: exporte o documento e importe uma cópia de recuperação, ou use a sincronização na origem correta. Não limpar os originais. As gravações no D1 usam controle de versão e conflitos preservam a cópia local.
 
-## Estado verificado em 27/10/2026
+## Histórico da publicação inicial em 27/10/2026
 
 - Projeto Pages criado e conectado ao GitHub. O commit `f60a1be` foi publicado automaticamente com sucesso, deploy `faf51a19-88ee-442c-8605-5789b0f176dd`. O check de validação do GitHub também passou.
 - Domínio `crm.marioserafim.com.br`: **Active**, **SSL enabled** no painel Cloudflare. HTTP retorna 301 para HTTPS.

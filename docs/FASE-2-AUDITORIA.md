@@ -1,6 +1,6 @@
 # Fase 2 — auditoria, estabilização e refinamento
 
-Trabalho local em 27/10/2026, na branch `phase-2-editor-stability`, a partir de `96eb283`. Não houve push, deploy, alteração de DNS, mudança no Access remoto, criação de D1 remoto ou chamada real de escrita/envio à Buttondown. A versão publicada continua a da fase anterior.
+Auditoria iniciada localmente em 27/10/2026, na branch `phase-2-editor-stability`, a partir de `96eb283`. Após autorização do proprietário, a fase foi enviada ao GitHub, integrada à `main` e publicada. Em 28/10/2026, o D1 remoto foi vinculado e um rascunho real foi homologado sem envio. O estado atual e as evidências estão em [Homologação de produção](HOMOLOGACAO-PRODUCAO.md); as descrições da auditoria abaixo preservam o histórico das correções.
 
 ## Problemas comprovados e distinções da auditoria
 
@@ -38,7 +38,7 @@ Foi escolhido D1 para documentos estruturados e configurações editoriais porqu
 
 A tabela `editorial_documents` contém `kind`, `id`, payload, versão e data. Uma gravação exige a versão conhecida pelo cliente. Duas sessões com a mesma versão não conseguem sobrescrever uma à outra: a segunda recebe 409 e conserva a cópia local. A confirmação da nuvem retorna a versão que foi efetivamente gravada, sem reler acidentalmente a atualização de outro escritor.
 
-O banco está implementado e validado **apenas localmente**. A gravação de cópia na nuvem é explícita; a sincronização Buttondown também mantém o documento no D1 quando o binding está disponível. Configurações remotas só substituem a cópia local após uma escolha explícita do usuário.
+O banco foi validado localmente e depois configurado em produção. A gravação de cópia na nuvem é explícita; a sincronização Buttondown também mantém o documento no D1. Configurações remotas só substituem a cópia local após uma escolha explícita do usuário.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -49,7 +49,7 @@ pnpm pages:local
 
 Revisão: http://127.0.0.1:8788. Dados locais: `.wrangler/editor-local`. Testes: `.wrangler/editor-test`, isolado da revisão. Os ids em `wrangler.local.toml` são identificadores locais fictícios; os comandos de migração usam obrigatoriamente `--local`.
 
-Em uma futura etapa de publicação autorizada será necessário criar um banco editorial próprio, aplicar a migração e adicionar o binding `DB` ao projeto Pages. Nenhuma dessas operações remotas foi executada nesta fase.
+O banco remoto `mais-um-cafezinho-editorial` e a migração `0001_editorial_documents.sql` já foram criados/aplicados. O binding `DB` fica restrito a `env.production`. O comando `pnpm db:production` aplica futuras migrações remotas após conferência do destino e das mudanças.
 
 ## Refinamentos de uso
 
@@ -85,13 +85,13 @@ Verificação feita contra o [OpenAPI oficial](https://docs.buttondown.com/opena
 - `pnpm build`: passou; inclui TypeScript da interface e das Functions.
 - `pnpm exec wrangler pages functions build --outdir .wrangler/functions-check`: passou.
 - Playwright: **13 cenários passaram**, incluindo JSON, preview, seleção, refresh, templates/undo/redo, blocos, imagens/alt, links, falha de upload, quota, rede, sincronização lenta, recuperação em segundo dispositivo, descoberta dos documentos na listagem, conflitos de versão e visualização desktop/mobile.
-- Integração com Buttondown testada exclusivamente por mocks; as rotas D1 foram testadas no runtime Pages local real.
-- GitHub Actions foi ampliado para repetir validação, instalar Chromium, migrar o D1 de testes e executar os fluxos críticos. O workflow está preparado na branch local; não foi enviado/executado no GitHub nesta fase.
+- Testes automatizados da Buttondown usam mocks; as rotas D1 foram testadas no runtime Pages local real. A homologação manual posterior também usou o D1 remoto e um rascunho real na Buttondown, conforme o relatório de produção.
+- GitHub Actions foi ampliado para repetir validação, instalar Chromium, migrar o D1 de testes e executar os fluxos críticos. O workflow foi enviado à `main` e o check `verify` passou. Após a homologação real, a regressão do redirecionamento no Workers elevou a suíte para **40 testes**.
 
 ## Limitações e funcionalidades não disponíveis
 
-1. Não houve publicação: a recuperação entre dispositivos no domínio oficial aguarda o binding D1 remoto e uma futura publicação autorizada.
-2. Renderização/processamento final do HTML dentro da Buttondown e clientes reais de e-mail não foi comprovada por escrita remota. Foram testados exportação, payload, respostas mockadas e preservação do descadastro. Recomenda-se um rascunho privado de homologação numa próxima etapa, sem envio.
+1. Recuperação no domínio oficial foi comprovada entre dois navegadores. A cópia na nuvem exige salvamento explícito ou sincronização; alterações apenas locais não aparecem automaticamente em outro dispositivo.
+2. O HTML foi conferido com um rascunho real e sua prévia processada na Buttondown. A API preservou exatamente o HTML; o template externo da Buttondown acrescenta cabeçalho/rodapé, parâmetros nos links e descadastro. O editor Fancy avisou sobre conversão incompleta. Clientes reais de e-mail ainda não foram testados, pois nenhum envio foi feito.
 3. Não há colaboração simultânea em tempo real. Conflitos de versões e alterações já persistidas em outra aba são detectados; o conteúdo local é preservado para escolha/recuperação.
 4. A migração de HTML legado para JSON depende da importação do editor e pode normalizar formatação. O HTML e o backup originais são preservados para conferência. JSON sintaticamente corrompido precisa de recuperação manual a partir do arquivo exportado; o sistema não adivinha trechos perdidos.
 5. A Buttondown não fornece, no contrato utilizado, uma transação distribuída com o D1. Uma falha entre as duas gravações fica visível; o vínculo/idempotência local evita criação duplicada na retomada. Edição concorrente na interface da Buttondown deve ser evitada enquanto este editor sincroniza.
@@ -99,7 +99,7 @@ Verificação feita contra o [OpenAPI oficial](https://docs.buttondown.com/opena
 7. O chunk do editor continua grande, carregado sob demanda. Não foi feita troca de editor/stack para contornar esse limite.
 8. Envio, publicação, agendamento de campanhas, importação de assinantes e disparos em massa continuam indisponíveis.
 
-Próxima etapa recomendada: revisar o fluxo local, depois homologar D1 e um rascunho privado com a Buttondown numa etapa separada e autorizada. Comparar HTML retornado e renderização em clientes de e-mail antes de considerar qualquer publicação.
+Próxima etapa recomendada: revisar a composição externa da Buttondown e o modo de edição para preservar o HTML ao reabrir pelo painel dela. Depois, numa etapa autorizada, conferir clientes reais de e-mail com destinatários de teste definidos pelo proprietário.
 
 ## Arquivos por conjunto
 
