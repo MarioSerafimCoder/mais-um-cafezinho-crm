@@ -13,6 +13,12 @@ afterEach(() => vi.unstubAllGlobals())
 const mock = (data: unknown, code = 200) => vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => Response.json(data, { status: code })))
 
 describe('Buttondown com mocks, sem chamadas externas', () => {
+  it('recusa uploads acima do limite sem encaminhar bytes à Buttondown', async () => {
+    mock({})
+    const req = new Request('https://crm.marioserafim.com.br/api/images', { method: 'POST', headers: { 'content-length': '8500001' } })
+    expect((await upload({ request: req, env })).status).toBe(413)
+    expect(fetch).not.toHaveBeenCalled()
+  })
   it('usa redirect manual compatível com Workers e recusa redirecionamento sem reenviar credenciais', async () => {
     vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
       expect(init.redirect).toBe('manual')

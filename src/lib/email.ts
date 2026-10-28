@@ -15,7 +15,14 @@ export function validateDraftPayload(subject: string, html: string) {
   if (!isSafeEmailBody(html)) {
     throw new Error('O conteúdo contém marcação ativa que não pode ser salva.')
   }
-  return { subject: cleanSubject, body: `<!-- buttondown-editor-mode: fancy -->${ensureUnsubscribeLink(html)}`, status: 'draft' as const }
+  return { subject: cleanSubject, body: `<!-- buttondown-editor-mode: plaintext -->${compatibleEmailBody(html)}`, status: 'draft' as const }
+}
+
+// Raw HTML inside Markdown mode avoids the lossy Fancy document conversion.
+// Newsletter scaffolding remains controlled by Buttondown on the Free plan.
+export function compatibleEmailBody(html: string) {
+  if (!isSafeEmailBody(html)) throw new Error('HTML não permitido.')
+  return ensureUnsubscribeLink(extractEmailBody(html)).trim()
 }
 
 export function extractEmailBody(html: string) {

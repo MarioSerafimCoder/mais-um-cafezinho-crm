@@ -24,7 +24,8 @@ describe('draft HTML', () => {
   it('marks Buttondown content as rich HTML and always creates a draft', () => {
     const result = validateDraftPayload('  Uma edição  ', '<html><body><p>Oi</p></body></html>')
     expect(result.subject).toBe('Uma edição')
-    expect(result.body).toContain('buttondown-editor-mode: fancy')
+    expect(result.body).toContain('buttondown-editor-mode: plaintext')
+    expect(result.body).not.toContain('<html>')
     expect(result.body).toContain('{{ unsubscribe_url }}')
     expect(result.status).toBe('draft')
   })
@@ -37,6 +38,16 @@ describe('draft HTML', () => {
 
   it('extracts the body portion of React Email output', () => {
     expect(extractEmailBody('<html><head></head><body><p>Texto</p></body></html>')).toBe('<p>Texto</p>')
+  })
+  it('preserva estrutura inline, imagem/alt e destinos ao gerar o fragmento compatível', () => {
+    const fragment = '<table role="presentation" style="width:100%;max-width:600px"><tbody><tr><td><h1 style="color:#c00">Título</h1><img src="https://example.com/a.png" alt="Descrição" style="max-width:100%" /><a href="https://example.com/?a=1&amp;b=2">Ler</a><a href="{{ unsubscribe_url }}">Sair</a></td></tr></tbody></table>'
+    const { body } = validateDraftPayload('Teste', `<html><head><style>body{margin:0}</style></head><body>${fragment}</body></html>`)
+    expect(body).toBe(`<!-- buttondown-editor-mode: plaintext -->${fragment}`)
+    expect(body.match(/unsubscribe_url/g)).toHaveLength(1)
+  })
+  it('não junta palavras nem modifica espaços em conteúdo pré-formatado', () => {
+    const html = '<p><a href="https://example.com">Uma</a> <strong>conversa</strong></p><pre> a\n\n b </pre><a href="{{ unsubscribe_url }}">Sair</a>'
+    expect(validateDraftPayload('Teste', html).body).toBe(`<!-- buttondown-editor-mode: plaintext -->${html}`)
   })
 })
 
