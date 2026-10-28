@@ -60,4 +60,24 @@ A revisão acrescentou recusa explícita a corpo JSON nulo/array e a revisões a
 
 Sequência para futura implantação: revisar PR e evidências remotas; conferir bindings de produção e flag ausente/false; autorizar e aplicar somente a migração aditiva no banco editorial correto; integrar main (isso publica automaticamente); verificar GET do endpoint com sessão e recusa POST sem habilitação. Não habilitar testes, cadastrar destinos ou ampliar permissões como parte do deploy. Uma autorização separada será necessária para qualquer mensagem real.
 
+## Revalidação local e estado remoto — 28/10/2026
+
+Revalidação nesta execução: `pnpm test` passou com 54 testes em 10 arquivos; `pnpm lint` passou; `pnpm build` passou com o aviso existente de chunk maior que 500 KB; `pnpm test:e2e` passou com 16 cenários em Chromium. Os três cenários de template verificam a exportação local, não a API Buttondown. O teste de recuperação usa dois contextos/navegadores Chromium contra o D1 local: comprova documento JSON estruturado e seus metadados nesse ambiente, mas não testa produção ou dois navegadores comerciais independentes.
+
+O E2E identificou que a seleção nativa do navegador podia divergir da seleção interna do editor. A prévia agora traduz âncora e foco do DOM para posições do editor e restaura a seleção ao voltar a escrever. O teste que falhava passou isoladamente e na bateria completa.
+
+| Template | Exportação local / conteúdo | Draft remoto Buttondown | Processado, mídias, links e descadastro | Evidência remota |
+| --- | --- | --- | --- | --- |
+| Novidades do blog | passou (Playwright, local) | não criado nesta execução | não inspecionado | nenhuma |
+| Curadoria editorial | passou (Playwright, local) | não criado nesta execução | não inspecionado | nenhuma |
+| Edição especial | passou (Playwright, local) | não criado nesta execução | não inspecionado | nenhuma |
+
+Nenhuma chamada real à API Buttondown ocorreu nesta execução. Os testes unitários do endpoint usam `fetch` mockado; os E2E usam o servidor e D1 locais. Não houve mensagens recebidas, teste em clientes de e-mail ou conversão pelo Fancy. Os testes locais cobrem exportação de imagens/alt, links e conteúdo dos templates, mas não comprovam o resultado processado pelo serviço. Não há credencial Buttondown nos arquivos locais verificados e a tentativa de inspecionar a sessão de CRM no Chrome expirou no CDP; portanto, não foi possível criar documentos separados ou sincronizar drafts remotos com evidência verificável.
+
+Estado remoto lido sem escrita: produção continua no commit `32d15d2`; existe preview Cloudflare da branch `phase-5-editorial-homologation` no commit `69c4ee8`. A migration remota ainda lista `0002_editorial_tests.sql` como pendente. Esta execução não aplicou migration, não publicou na produção, não mudou secrets/flag/permissões e não enviou e-mails. O push de branch pode iniciar um novo preview automático; a produção só muda após integração à `main`.
+
+O ciclo remoto de persistência (documento novo → D1 → draft da Buttondown → recuperação de outro navegador → edição sincronizada do mesmo ID) permanece pendente. Também permanece pendente confirmar imagens carregadas, alt processado, tipografia, links/botões, descadastro, status `draft` e a ausência do aviso Fancy em cada template. Nenhuma captura remota foi registrada.
+
+Antes da integração: revisar as diferenças da branch; obter uma sessão Buttondown autorizada sem ampliar permissões e criar três documentos de homologação novos; confirmar cada ID/revisão/status e capturar a prévia processada; executar o ciclo remoto de recuperação; então autorizar explicitamente migration aditiva e integração à `main` (que publica automaticamente). Manter `EDITORIAL_TEST_ENABLED` ausente ou falso e deixar mensagens recebidas para uma autorização separada.
+
 O inventário de navegador desta execução retornou bloqueio por configuração local do Work. A homologação remota aguarda liberação e sessões autenticadas; nenhuma credencial foi extraída nem foi contornada essa restrição. O estado atual de bindings/deploy remoto não foi revalidado e não deve ser inferido apenas dos documentos anteriores.
