@@ -10,7 +10,6 @@ CF_ACCESS_AUD = "1dcdb17fc28023520a352aa35d32e11ba6514a74df64334766e241d57e775c5
 [env.production.vars]
 CF_ACCESS_TEAM_DOMAIN = "wispy-hall-9782.cloudflareaccess.com"
 CF_ACCESS_AUD = "1dcdb17fc28023520a352aa35d32e11ba6514a74df64334766e241d57e775c54"
-EDITORIAL_TEST_ENABLED = "true"
 CAMPAIGN_SENDING_ENABLED = "true"
 
 [[env.production.d1_databases]]
