@@ -4,7 +4,12 @@ import { buttondown, errorResponse, json, matchesButtondownTemplate, parseJson, 
 function recipients(env: AppEnv) {
   return (env.EDITORIAL_TEST_RECIPIENTS || '').split(',').map(s => s.trim()).filter(s => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))
 }
-function enabled(env: AppEnv) { return env.EDITORIAL_TEST_ENABLED !== 'false' && Boolean(env.BUTTONDOWN_API_KEY?.trim()) && recipients(env).length > 0 }
+function enabled(env: AppEnv) {
+  // A configured allowlist keeps the original safe default. When the owner
+  // explicitly enables tests, the editor may collect up to 30 addresses in
+  // its modal and this endpoint validates each one before sending.
+  return env.EDITORIAL_TEST_ENABLED !== 'false' && Boolean(env.BUTTONDOWN_API_KEY?.trim()) && (recipients(env).length > 0 || env.EDITORIAL_TEST_ENABLED === 'true')
+}
 export async function onRequestGet({ request, env }: { request: Request; env: AppEnv }) {
   try {
     const draftId = new URL(request.url).searchParams.get('draftId')
@@ -24,7 +29,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: A
     const raw = await parseJson(request, 4096)
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return json({ error: 'Solicitação inválida.' }, 400)
     const input = raw as Record<string, unknown>
-    if (Object.keys(input).some(k => !['draftId', 'cloudRevision', 'recipientIndex', 'attemptId', 'confirm', 'cancel'].includes(k))) return json({ error: 'Campos não permitidos.' }, 400)
+    if (Object.keys(input).some(k => !['draftId', 'cloudRevision', 'recipientIndex', 'recipient', 'attemptId', 'confirm', 'cancel'].includes(k))) return json({ error: 'Campos não permitidos.' }, 400)
     if (typeof input.draftId !== 'string' || !validId(input.draftId) || !Number.isSafeInteger(input.cloudRevision) || Number(input.cloudRevision) < 1) return json({ error: 'Documento inválido.' }, 400)
     if (input.cancel === true && typeof input.attemptId === 'string' && validId(input.attemptId)) {
       const result = await database(env).prepare("UPDATE editorial_tests SET state = 'cancelled' WHERE id = ? AND draft_id = ? AND state = 'prepared'").bind(input.attemptId, input.draftId).run()
@@ -40,8 +45,12 @@ export async function onRequestPost({ request, env }: { request: Request; env: A
     if (!matchesButtondownTemplate(campaign.template, draft.buttondownTemplate)) return json({ error: 'O template da campanha na Buttondown diverge da revisão do CRM. Salve e sincronize novamente.' }, 409)
     if (draft.syncedBodyHash !== await bodyHash(campaign.body)) return json({ error: 'O conteúdo na Buttondown diverge da revisão salva no CRM. Salve e sincronize novamente.' }, 409)
     if (!input.attemptId) {
-      if (!Number.isInteger(input.recipientIndex)) return json({ error: 'Selecione um destino autorizado.' }, 400)
-      const recipient = recipients(env)[Number(input.recipientIndex)]
+      const requested = typeof input.recipient === 'string' ? input.recipient.trim().toLowerCase() : ''
+      if (requested && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(requested)) return json({ error: 'Informe um e-mail válido.' }, 400)
+      if (requested && recipients(env).length > 0 && !recipients(env).includes(requested)) return json({ error: 'Este endereço não está autorizado para testes.' }, 403)
+      if (requested && !recipients(env).length && env.EDITORIAL_TEST_ENABLED !== 'true') return json({ error: 'Configure a autorização de testes antes de informar um destinatário.' }, 403)
+      if (!requested && !Number.isInteger(input.recipientIndex)) return json({ error: 'Selecione um destino autorizado.' }, 400)
+      const recipient = requested || recipients(env)[Number(input.recipientIndex)]
       if (!recipient) return json({ error: 'Destino não autorizado.' }, 403)
       await db.prepare("UPDATE editorial_tests SET state = 'expired' WHERE campaign_id = ? AND recipient = ? AND state = 'prepared' AND created_at < ?").bind(draft.buttondownId, recipient, new Date(Date.now() - 600000).toISOString()).run()
       const id = crypto.randomUUID()

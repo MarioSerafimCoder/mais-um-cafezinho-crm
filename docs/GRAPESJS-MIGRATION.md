@@ -51,14 +51,17 @@ requisição D1 até 450 KB.
   e-mail. Nenhum e-mail foi enviado para testar esta migração.
 
 ## Operação e validação
-Aplicar a migração aditiva D1 antes da publicação. Não alterar Access, secrets,
-plano Buttondown ou configurações de envio. O novo editor oferece somente
-edição, prévia, recuperação e sincronização de rascunhos.
+Aplicar a migração aditiva D1 antes da publicação. Não alterar Access, secrets
+ou plano Buttondown. O editor guia edição, prévia, destinatários e resumo em
+etapas distintas. O botão de teste usa somente o endpoint protegido de teste;
+ele aceita endereços digitados quando `EDITORIAL_TEST_ENABLED=true`, ou respeita
+a allowlist `EDITORIAL_TEST_RECIPIENTS` quando ela estiver configurada. O envio
+de campanha continua condicionado à flag explícita `CAMPAIGN_SENDING_ENABLED`.
 
 Executar pnpm test, pnpm lint, pnpm build e pnpm test:e2e.
 A suíte usa o canvas e compilador reais, D1 local, recuperação em outro contexto,
 arrastar e soltar, edição WYSIWYG, upload com falha, controles de revisão,
 migração de JSON real legado e os seis templates. Apenas integrações externas
-de teste são simuladas; nenhum endpoint real de envio é chamado.
+de teste são simuladas; nenhum endpoint real de envio é chamado durante a suíte.
 
-Validação em 29/10/2026: 125 testes unitários, 26 testes E2E, lint, build e compilação das Pages Functions aprovados.
+Validação em 29/10/2026: 126 testes unitários, 27 testes E2E, lint, build e compilação das Pages Functions aprovados.

@@ -45,3 +45,7 @@ it('bloqueia allowlist vazia ou índice inexistente sem enviar', async () => {
   expect((await run({ recipientIndex: 0 })).status).toBe(403)
   expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/send-draft'))).toHaveLength(0)
 })
+it('aceita endereços digitados quando o proprietário habilita testes sem allowlist', async () => {
+  const run = setup({ EDITORIAL_TEST_RECIPIENTS: '', EDITORIAL_TEST_ENABLED: 'true' })
+  expect((await run({ recipient: 'leitor@example.com' })).status).toBe(200)
+})

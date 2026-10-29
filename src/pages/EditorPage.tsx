@@ -5,6 +5,8 @@ import { api, ApiError } from '../lib/api'
 import { getTemplate, templates } from '../data/templates'
 import { TemplatesPage } from './TemplatesPage'
 import { GrapesEditor } from '../components/GrapesEditor'
+import { SendStage } from '../components/SendStage'
+import { SendSummary } from '../components/SendSummary'
 import { Button, ErrorState, Field, LoadingState } from '../components/ui'
 import { DraftSession } from '../lib/draft-session'
 import { DraftPersistence } from '../lib/draft-persistence'
@@ -33,7 +35,10 @@ function Workspace({ routeId, templateId, copy }: { routeId: string; templateId:
   const [persistenceView, setPersistenceView] = useState<DraftPersistence | null>(null)
   const [initial, setInitial] = useState<GrapesDocument | null>(null); const [integration, setIntegration] = useState<IntegrationStatus | null>(null)
   const [error, setError] = useState(''); const [loadError, setLoadError] = useState(''); const [notice, setNotice] = useState('')
-  const [stage, setStage] = useState<'edit' | 'preview'>('edit'); const [preview, setPreview] = useState(''); const [previewDevice, setPreviewDevice] = useState('Desktop')
+  const [stage, setStage] = useState<'edit' | 'preview' | 'send' | 'summary'>('edit'); const [preview, setPreview] = useState(''); const [previewDevice, setPreviewDevice] = useState('Desktop')
+  const [audience, setAudience] = useState<{ mode: 'all_active' } | { mode: 'selected'; subscriberIds: string[] } | null>(null)
+  const [audienceCount, setAudienceCount] = useState(0); const [audienceRecipients, setAudienceRecipients] = useState<import('../types').Subscriber[]>([])
+  const [settings] = useState(() => readSettings())
   const blocker = useBlocker(() => Boolean(session.current?.dirty || invalid.current))
   useEffect(() => {
     let active = true
@@ -133,6 +138,18 @@ function Workspace({ routeId, templateId, copy }: { routeId: string; templateId:
     if (!isGrapesDocument(doc)) throw new Error('O editor ainda está carregando.')
     setPreview(compileEmail(doc)); setStage('preview')
   })
+  const prepareForExternalAction = async () => {
+    capture()
+    if (!queue.current) throw new Error('O salvamento ainda está sendo preparado.')
+    await queue.current.flush(true)
+    if (!session.current) throw new Error('A edição ainda está carregando.')
+    return structuredClone(session.current.value)
+  }
+  const editFromSend = (target: 'subject' | 'content' | 'audience') => {
+    if (target === 'subject') setStage('edit')
+    else if (target === 'content') setStage('preview')
+    else setStage('send')
+  }
   const exportOriginal = () => void action(async () => {
     let original = readOriginal(session.current?.value.id || routeId)
     if (!original && integration?.cloud && source.current?.schemaVersion === 3) original = await api.originalDraft(session.current?.value.id || routeId).catch(() => null)
@@ -143,12 +160,16 @@ function Workspace({ routeId, templateId, copy }: { routeId: string; templateId:
   if (loadError) return <><Link to="/campaigns">← Edições</Link><ErrorState message={loadError} /><Button variant="outline" onClick={exportOriginal}>Exportar original para recuperação</Button></>
   if (!initial || !currentSession) return <LoadingState label="Preparando seu documento no novo editor…" />
   const current = currentSession; const draft = current.value; const busy = persistenceView?.busy || current.syncing
-  return <div className="grapes-page">
+  return <div className={`grapes-page stage-${stage}`}>
     <div className="grapes-page-top"><Link className="back-link" to="/campaigns">← Edições</Link><span role="status">{persistenceView?.label || 'Abrindo canvas…'}</span></div>
-    <div className="grapes-page-heading"><div><p className="eyebrow">MAIS UM CAFEZINHO · ESTÚDIO EDITORIAL</p><input className="subject-input" aria-label="Assunto da newsletter" value={draft.subject} onChange={e => { current.edit({ subject: e.target.value }); queue.current?.schedule() }} /></div><Button onClick={stage === 'edit' ? openPreview : () => setStage('edit')}>{stage === 'edit' ? 'Revisar edição' : 'Voltar à edição'}</Button></div>
+    <nav className="editor-stage-nav" aria-label="Etapas da campanha">{[['edit', '1 · Edição'], ['preview', '2 · Prévia'], ['send', '3 · Envio'], ['summary', '4 · Resumo']].map(([key, label], index) => <button type="button" key={key} className={stage === key ? 'is-active' : ''} disabled={key === 'summary' ? !audience : index > (['edit', 'preview', 'send', 'summary'] as const).indexOf(stage)} onClick={() => setStage(key as typeof stage)}>{label}</button>)}</nav>
+    {stage === 'edit' && <div className="grapes-page-heading"><div><p className="eyebrow">MAIS UM CAFEZINHO · ESTÚDIO EDITORIAL</p><input className="subject-input" aria-label="Assunto da newsletter" value={draft.subject} onChange={e => { current.edit({ subject: e.target.value }); queue.current?.schedule() }} /></div><Button onClick={openPreview}>Revisar edição</Button></div>}
+    {stage === 'preview' && <div className="grapes-page-heading"><div><p className="eyebrow">ETAPA 02 · PRÉVIA</p><h1>Revise sua edição</h1></div><div className="stage-heading-actions"><Button variant="outline" onClick={() => setStage('edit')}>Voltar à edição</Button><Button onClick={() => setStage('send')}>Continuar para envio</Button></div></div>}
     <details className="grapes-edition-settings"><summary>Detalhes da edição e recuperação</summary><div className="grapes-edition-fields"><Field label="Texto de prévia"><input value={draft.description || ''} maxLength={200} onChange={e => { current.edit({ description: e.target.value }); queue.current?.schedule() }} /></Field><Field label="Data da edição"><input type="date" value={draft.editionDate || ''} onChange={e => { current.edit({ editionDate: e.target.value }); queue.current?.schedule() }} /></Field></div><div className="grapes-recovery-actions"><Button variant="outline" size="sm" disabled={busy || !integration?.connected} onClick={() => void action(async () => { capture(); await queue.current?.flush(true); setNotice('Rascunho sincronizado. Nenhum e-mail foi enviado.') })}>Sincronizar rascunho</Button><Button variant="quiet" size="sm" onClick={() => void action(() => { capture(); download(`cafezinho-${draft.id}.json`, JSON.stringify(current.value, null, 2)) })}>Exportar documento</Button><Button variant="quiet" size="sm" onClick={exportOriginal}>Exportar original</Button><Button variant="quiet" size="sm" onClick={() => void action(() => { capture(); if (isGrapesDocument(current.value.document)) download('newsletter.html', compileEmail(current.value.document), 'text/html') })}>Exportar HTML</Button></div></details>
     {error && <ErrorState message={error} />}{notice && <p className="success-message" role="status">{notice}</p>}
     <div hidden={stage !== 'edit'}><GrapesEditor document={initial} onReady={ready} onChange={changed} onError={message => { invalid.current = true; setError(message) }} /></div>
     {stage === 'preview' && <section className="grapes-preview"><div className="grapes-preview-heading"><div><p className="eyebrow">PRÉVIA DA EDIÇÃO</p><h2>{draft.subject}</h2></div><div>{['Desktop', 'Mobile'].map(name => <Button key={name} variant="outline" aria-pressed={name === previewDevice} onClick={() => setPreviewDevice(name)}>{name}</Button>)}</div></div><iframe style={{ width: previewDevice === 'Mobile' ? 375 : '100%' }} title="Prévia da edição" sandbox="" referrerPolicy="no-referrer" srcDoc={preview} /><p>Prévia do fragmento HTML sincronizado. A plataforma acrescenta o rodapé de descadastro.</p></section>}
+    {stage === 'send' && <SendStage draft={draft} settings={settings} onPrepare={prepareForExternalAction} onEdit={editFromSend} onAdvance={(nextAudience, count, recipients) => { setAudience(nextAudience); setAudienceCount(count); setAudienceRecipients(recipients); setStage('summary') }} />}
+    {stage === 'summary' && audience && <SendSummary draft={draft} audience={audience} count={audienceCount} recipients={audienceRecipients} onBack={() => setStage('send')} onTest={() => setStage('send')} />}
   </div>
 }

@@ -45,6 +45,7 @@ export const api = {
   }),
   campaignDeliveryStatus: () => request<CampaignDeliveryStatus>('/api/campaign-delivery'),
   campaignDelivery: (payload: Record<string, unknown>) => request<Partial<PreparedCampaignDelivery> & { accepted?: boolean; cancelled?: boolean; error?: string }>('/api/campaign-delivery', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
+  editorialTest: (payload: Record<string, unknown>) => request<{ attemptId?: string; recipient?: string; accepted?: boolean; state?: string }>('/api/editorial-test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
   campaigns: (page = 1) => request<ApiPage<Campaign>>(`/api/emails?page=${page}`),
   campaign: (id: string) => request<Campaign>(`/api/emails/${encodeURIComponent(id)}`),
   saveDraft: (payload: { id?: string; subject: string; body: string; description?: string; buttondownTemplate?: 'classic' | 'modern'; createKey?: string; expectedBodyHash?: string }) => request<Campaign>(payload.id ? `/api/emails/${encodeURIComponent(payload.id)}` : '/api/emails', {
