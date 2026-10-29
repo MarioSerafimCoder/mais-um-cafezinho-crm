@@ -67,7 +67,22 @@ export function SendStage({ draft, settings, onPrepare, onEdit, onAdvance }: Pro
   const selectedRows = useMemo(() => Object.values(selected).sort((a, b) => a.email_address.localeCompare(b.email_address)), [selected])
   const count = mode === 'all_active' ? activeCount || 0 : selectedRows.length
   const totalPages = Math.max(1, Math.ceil(Math.max(pages?.regular.count || 0, pages?.premium.count || 0) / pageSize))
-  const allChecked = Object.values(checked).every(Boolean) && count > 0
+  // A valid audience and a loaded document are already verified by the CRM.
+  // Requiring a second click on the audience check left the primary action
+  // disabled even when recipients were selected.
+  const automaticallyChecked = {
+    audience: count > 0,
+    subject: draft.subject.trim().length > 0,
+    sender: true,
+    content: Boolean(draft.document),
+  }
+  const effectiveChecked = {
+    audience: automaticallyChecked.audience || checked.audience,
+    subject: automaticallyChecked.subject || checked.subject,
+    sender: automaticallyChecked.sender || checked.sender,
+    content: automaticallyChecked.content || checked.content,
+  }
+  const allChecked = count > 0 && automaticallyChecked.subject && automaticallyChecked.content && Object.values(effectiveChecked).every(Boolean)
 
   const toggle = (contact: Subscriber) => setSelected(current => {
     if (current[contact.id]) { const next = { ...current }; delete next[contact.id]; return next }
@@ -77,9 +92,9 @@ export function SendStage({ draft, settings, onPrepare, onEdit, onAdvance }: Pro
   const check = (key: keyof typeof checked) => setChecked(current => ({ ...current, [key]: !current[key] }))
 
   return <section className="send-stage" aria-label="Etapa 3: envio">
-    <div className="send-stage-heading"><div><p className="eyebrow">ETAPA 03 · ENVIO</p><h1>Revise o envio</h1><p>Confira a audiência e os dados da edição antes de avançar para o resumo.</p></div><Button variant="outline" icon={<Mail size={16} />} onClick={() => setTestOpen(true)}>Enviar email de teste</Button></div>
+    <div className="send-stage-heading"><div><p className="eyebrow">ETAPA 03 · ENVIO</p><h1>Revise o envio</h1><p>Confira a audiência e os dados da edição antes de avançar para o resumo.</p></div><div className="send-stage-actions send-stage-actions-top"><Button variant="outline" onClick={() => onEdit('content')}>Voltar à prévia</Button><Button variant="outline" icon={<Mail size={16} />} onClick={() => setTestOpen(true)}>Enviar email de teste</Button><Button disabled={!allChecked || loading} onClick={() => onAdvance(mode === 'all_active' ? { mode } : { mode, subscriberIds: selectedRows.map(contact => contact.id) }, count, selectedRows)}>Avançar</Button></div></div>
     <div className="send-checklist">
-      <ChecklistCard title="Destinatários" icon={<Users size={20} />} checked={checked.audience} onCheck={() => check('audience')} onEdit={() => onEdit('audience')}>
+      <ChecklistCard title="Destinatários" icon={<Users size={20} />} checked={effectiveChecked.audience} onCheck={() => check('audience')} onEdit={() => onEdit('audience')}>
         <fieldset className="send-audience" disabled={loading}>
           <legend>Escolha a audiência</legend>
           <label className={mode === 'all_active' ? 'is-selected' : ''}><input type="radio" name={`send-audience-${draft.id}`} checked={mode === 'all_active'} onChange={() => { setMode('all_active'); setChecked(current => ({ ...current, audience: false })) }} /><span><strong>Todos os assinantes</strong><small>Ativos e elegíveis</small></span><b>{activeCount ?? '—'}</b></label>
@@ -87,12 +102,11 @@ export function SendStage({ draft, settings, onPrepare, onEdit, onAdvance }: Pro
         </fieldset>
         {mode === 'selected' && <div className="send-contact-picker"><Field label="Buscar contatos ativos"><input type="search" value={searchInput} onChange={event => setSearchInput(event.target.value)} placeholder="Nome ou e-mail" /></Field><div className="send-contact-list">{contacts.map(contact => <label key={contact.id}><input type="checkbox" checked={Boolean(selected[contact.id])} onChange={() => toggle(contact)} /><span>{typeof contact.metadata?.name === 'string' ? contact.metadata.name : contact.email_address}<small>{contact.email_address}</small></span></label>)}{!contacts.length && <p>Nenhum contato ativo nesta página.</p>}</div><div className="send-pagination"><span>Página {page} de {totalPages}</span><span><button type="button" disabled={page <= 1} onClick={() => setPage(value => value - 1)}>Anterior</button><button type="button" disabled={page >= totalPages} onClick={() => setPage(value => value + 1)}>Próxima</button></span></div>{selectedRows.length > 0 && <div className="send-selected"><strong>Selecionados ({selectedRows.length}/500)</strong>{selectedRows.map(contact => <span key={contact.id}>{contact.email_address}</span>)}</div>}</div>}
       </ChecklistCard>
-      <ChecklistCard title="Assunto" checked={checked.subject} onCheck={() => check('subject')} onEdit={() => onEdit('subject')}><strong className="send-value">{draft.subject || 'Sem assunto'}</strong></ChecklistCard>
-      <ChecklistCard title="Remetente" checked={checked.sender} onCheck={() => check('sender')}><span className="send-value">{settings.senderName || 'Mário Serafim'}{settings.senderEmail ? ` · ${settings.senderEmail}` : ' · remetente configurado na Buttondown'}</span></ChecklistCard>
-      <ChecklistCard title="Conteúdo" checked={checked.content} onCheck={() => check('content')} onEdit={() => onEdit('content')}><span className="send-value">O layout está pronto e será enviado como HTML compatível com a newsletter.</span></ChecklistCard>
+      <ChecklistCard title="Assunto" checked={effectiveChecked.subject} onCheck={() => check('subject')} onEdit={() => onEdit('subject')}><strong className="send-value">{draft.subject || 'Sem assunto'}</strong></ChecklistCard>
+      <ChecklistCard title="Remetente" checked={effectiveChecked.sender} onCheck={() => check('sender')}><span className="send-value">{settings.senderName || 'Mário Serafim'}{settings.senderEmail ? ` · ${settings.senderEmail}` : ' · remetente configurado na Buttondown'}</span></ChecklistCard>
+      <ChecklistCard title="Conteúdo" checked={effectiveChecked.content} onCheck={() => check('content')} onEdit={() => onEdit('content')}><span className="send-value">O layout está pronto e será enviado como HTML compatível com a newsletter.</span></ChecklistCard>
     </div>
     {error && <ErrorState message={error} />}
-    <div className="send-stage-actions"><Button variant="outline" onClick={() => onEdit('content')}>Voltar à prévia</Button><Button disabled={!allChecked || loading} onClick={() => onAdvance(mode === 'all_active' ? { mode } : { mode, subscriberIds: selectedRows.map(contact => contact.id) }, count, selectedRows)}>Avançar</Button></div>
     {testOpen && <TestEmailDialog onPrepare={onPrepare} onClose={() => setTestOpen(false)} />}
   </section>
 }

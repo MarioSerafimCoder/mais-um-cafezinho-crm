@@ -782,7 +782,8 @@ a { color: inherit; text-decoration: none; }
 .send-pagination button:disabled { cursor: not-allowed; opacity: .5; }
 .send-selected { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; background: var(--surface-2); color: var(--ink-2); font-size: 11px; }
 .send-selected strong { flex-basis: 100%; }
-.send-stage-actions { display: flex; justify-content: flex-end; gap: 10px; margin: 22px 0; }
+.send-stage-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+.send-stage-actions-top { margin-left: auto; flex-shrink: 0; }
 .send-dialog-backdrop { position: fixed; z-index: 40; inset: 0; display: grid; place-items: center; padding: 20px; background: rgb(13 25 36 / .55); }
 .send-dialog { position: relative; width: min(100%, 650px); padding: 38px; border-radius: 18px; background: var(--surface); box-shadow: 0 24px 70px rgb(0 0 0 / .25); }
 .send-dialog-close { position: absolute; top: 22px; right: 22px; padding: 5px; color: var(--ink-2); border: 0; background: transparent; cursor: pointer; }
