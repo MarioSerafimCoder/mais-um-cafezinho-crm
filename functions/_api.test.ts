@@ -51,6 +51,20 @@ describe('Buttondown com mocks, sem chamadas externas', () => {
     expect(result.sentCampaigns).toBe(123)
   })
 
+  it('preserva analytics disponíveis e não falha quando o recurso não está liberado', async () => {
+    const network = vi.fn(async (url: string | URL | Request) => {
+      if (String(url).includes('/analytics')) return Response.json({ recipients: 12, deliveries: 12, opens: 7, clicks: 1 })
+      return Response.json({ results: [{ id: 'em_sent', subject: 'Campanha', status: 'sent' }], count: 1 })
+    })
+    vi.stubGlobal('fetch', network)
+    const result = await (await dashboard({ request, env })).json() as { recent: Array<{ analytics?: { opens?: number } }> }
+    expect(result.recent[0]?.analytics?.opens).toBe(7)
+
+    network.mockImplementation(async (url: string | URL | Request) => String(url).includes('/analytics') ? Response.json({ detail: 'analytics add-on unavailable' }, { status: 403 }) : Response.json({ results: [{ id: 'em_sent', subject: 'Campanha', status: 'sent' }], count: 1 }))
+    const unavailable = await (await dashboard({ request, env })).json() as { recent: Array<{ analytics: unknown }> }
+    expect(unavailable.recent[0]?.analytics).toBeNull()
+  })
+
   it('não transforma resposta inválida em lista vazia', async () => {
     mock({ unexpected: true })
     expect((await subscribers({ request, env })).status).toBe(500)

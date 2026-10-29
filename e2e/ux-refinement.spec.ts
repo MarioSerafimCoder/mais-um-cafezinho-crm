@@ -5,6 +5,40 @@ test('visão geral retoma o rascunho local', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('link', { name: 'Continuar escrevendo' })).toHaveAttribute('href', '/editor/local-continue')
 })
+test('visão geral exibe métricas reais e ações da campanha', async ({ page }) => {
+  await page.route('**/api/status', route => route.fulfill({ json: { configured: true, connected: true, demo: false, cloud: true } }))
+  await page.route('**/api/dashboard', route => route.fulfill({ json: {
+    subscribers: 177,
+    newSubscribers: 4,
+    sentCampaigns: 1,
+    drafts: 0,
+    scheduled: 0,
+    recent: [{ id: 'em_metrics', subject: 'Uma edição com métricas', status: 'sent', publish_date: '2026-10-26T09:00:00Z', absolute_url: 'https://buttondown.com/example', analytics: { recipients: 177, deliveries: 177, opens: 0, clicks: 0, temporary_failures: 1, permanent_failures: 0, unsubscriptions: 0, complaints: 0, open_rate: 0.6136, click_rate: 0.017, temporary_failure_rate: 0.0056, complaint_rate: 0 } }],
+    upcoming: [],
+    demo: false,
+  } }))
+  await page.goto('/')
+  await expect(page.getByRole('columnheader', { name: 'ABERTURA' })).toBeVisible()
+  await expect(page.getByText('61,36%')).toBeVisible()
+  await page.getByRole('button', { name: 'Ações para Uma edição com métricas' }).click()
+  await expect(page.getByText('Visualizar email', { exact: true })).toBeVisible()
+  await expect(page.getByText('Estatísticas', { exact: true })).toBeVisible()
+  await expect(page.getByText('Duplicar', { exact: true })).toBeVisible()
+  await expect(page.getByText('Exportar modelo', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Estatísticas' }).click()
+  await expect(page.getByRole('dialog', { name: 'Uma edição com métricas' })).toBeVisible()
+})
+
+test('visão geral oculta métricas e ações de analytics indisponíveis', async ({ page }) => {
+  await page.route('**/api/status', route => route.fulfill({ json: { configured: true, connected: true, demo: false, cloud: true } }))
+  await page.route('**/api/dashboard', route => route.fulfill({ json: { subscribers: 12, newSubscribers: 1, sentCampaigns: 1, drafts: 0, scheduled: 0, recent: [{ id: 'em_no_analytics', subject: 'Sem analytics', status: 'sent', publish_date: '2026-10-26T09:00:00Z', absolute_url: 'https://buttondown.com/example', analytics: null }], upcoming: [], demo: false } }))
+  await page.goto('/')
+  await expect(page.getByRole('columnheader', { name: 'DATA DE ENVIO' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'ABERTURA' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Ações para Sem analytics' }).click()
+  await expect(page.getByText('Estatísticas', { exact: true })).toHaveCount(0)
+})
+
 test('três painéis e prévia utilizáveis em desktop e notebook', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 })
   await page.goto('/editor/new?template=blog')

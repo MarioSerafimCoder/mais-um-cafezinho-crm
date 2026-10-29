@@ -51,6 +51,21 @@ export type PreparedCampaignDelivery = {
   selectedRecipients?: Array<{ id: string; email_address: string }>
 }
 
+export type CampaignAnalytics = {
+  recipients?: number | null
+  deliveries?: number | null
+  opens?: number | null
+  clicks?: number | null
+  temporary_failures?: number | null
+  permanent_failures?: number | null
+  unsubscriptions?: number | null
+  complaints?: number | null
+  open_rate?: number | null
+  click_rate?: number | null
+  temporary_failure_rate?: number | null
+  complaint_rate?: number | null
+}
+
 export type Campaign = {
   id: string
   subject: string
@@ -65,6 +80,7 @@ export type Campaign = {
   buttondownId?: string
   demo?: boolean
   origin?: 'local' | 'cloud'
+  analytics?: CampaignAnalytics | null
 }
 
 export type ApiPage<T> = {
