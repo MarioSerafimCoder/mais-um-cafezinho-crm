@@ -13,8 +13,8 @@ export function TemplatesPage() {
     return thumbnail ? html.replace('</head>', '<style>html,body{overflow:hidden}::-webkit-scrollbar{display:none}</style></head>') : html
   }
   return <>
-    <PageTitle eyebrow="BIBLIOTECA DE EDIÇÕES" title="Templates" description="Três pontos de partida. O resto é seu." />
-    <div className="template-intro"><span className="intro-index">01—03</span><p>Estruturas editoriais para dar ritmo à edição e deixar o assunto principal respirar. Todo bloco continua editável.</p></div>
+    <PageTitle eyebrow="BIBLIOTECA DE EDIÇÕES" title="Escolha o seu template" description="Primeiro, escolha a estrutura. Depois, escreva, revise e envie." />
+    <div className="template-intro"><span className="intro-index">01—06</span><p>Estruturas editoriais para dar ritmo à edição e deixar o assunto principal respirar. Todo bloco continua editável.</p></div>
     <section className="template-grid">
       {templates.map((template) => {
         return <article className={`template-card template-${template.id}`} key={template.id}>
@@ -25,6 +25,6 @@ export function TemplatesPage() {
       })}
     </section>
     {expanded && <div className="editor-dialog-backdrop" onClick={() => setExpanded(null)}><section role="dialog" aria-modal="true" aria-label={`Prévia: ${expanded.name}`} className="editor-dialog template-dialog" onClick={event => event.stopPropagation()}><div className="template-dialog-header"><h2>{expanded.name}</h2><Button variant="quiet" onClick={() => setExpanded(null)}>Fechar prévia</Button></div><iframe title={`Prévia ampliada: ${expanded.name}`} sandbox="" referrerPolicy="no-referrer" srcDoc={preview(expanded)} /><Link to={`/editor/new?template=${expanded.id}`}><Button>Começar edição</Button></Link></section></div>}
-    <div className="template-footer-note"><span>+</span><p>Simulações locais de HTML, não capturas do Gmail ou Outlook. Classic é selecionado por edição; o rodapé de descadastro é acrescentado pela Buttondown após a sincronização.</p><a href="https://react.email/editor" target="_blank" rel="noreferrer">Sobre o editor <ArrowUpRight size={13} /></a></div>
+    <div className="template-footer-note"><span>+</span><p>Seis estruturas com a identidade do Mais um Cafezinho. Cores, assinatura e conteúdo prontos para você editar.</p><a href="https://react.email/editor" target="_blank" rel="noreferrer">Sobre o editor <ArrowUpRight size={13} /></a></div>
   </>
 }

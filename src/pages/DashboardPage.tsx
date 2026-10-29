@@ -51,14 +51,14 @@ export function DashboardPage() {
       <section className="dashboard-lower">
         <div className="section-heading"><div><p className="eyebrow">CADERNO DE BORDO</p><h2>Movimentações recentes</h2></div><Link className="subtle-link" to="/campaigns">Ver edições <ArrowUpRight size={14} /></Link></div>
         {summary.recent.length ? <div className="activity-list">
-          {summary.recent.slice(0, 5).map((campaign) => <article className="activity-row" key={campaign.id}>
+          {summary.recent.slice(0, 5).map((campaign) => <Link className="activity-row" to={`/editor/${encodeURIComponent(campaign.id)}${campaign.status === 'draft' ? '' : '?copy=1'}`} key={campaign.id}>
             <div className="activity-date">{dateLabel(campaign.publish_date || campaign.creation_date)}</div>
             <div className="activity-main"><strong>{campaign.subject || 'Sem assunto'}</strong><span>{campaign.status === 'sent' ? 'Edição enviada' : campaign.status === 'draft' ? 'Rascunho em andamento' : campaign.status === 'scheduled' ? 'Envio agendado' : campaign.status}</span></div>
             <StatusPill tone={campaign.status === 'sent' ? 'success' : campaign.status === 'draft' ? 'neutral' : 'warning'}>{campaign.status === 'sent' ? 'Publicado' : campaign.status === 'draft' ? 'Rascunho' : campaign.status === 'scheduled' ? 'Agendado' : campaign.status}</StatusPill>
-          </article>)}
+          </Link>)}
         </div> : <div className="quiet-empty"><p>Nenhuma campanha por aqui. O lado bom é que ainda não mandamos nenhuma vergonha por e-mail.</p><Link to="/editor/new">Começar uma edição <ArrowRight size={14} /></Link></div>}
       </section>
-      {summary.upcoming.length > 0 && <section className="upcoming-section"><div className="section-heading"><div><p className="eyebrow">PRÓXIMOS ENVIOS</p><h2>Já têm hora marcada</h2></div></div><div className="activity-list">{summary.upcoming.map((campaign) => <article className="activity-row" key={campaign.id}><div className="activity-date">{dateLabel(campaign.publish_date)}</div><div className="activity-main"><strong>{campaign.subject || 'Sem assunto'}</strong><span>Preparada na Buttondown</span></div><StatusPill tone="warning">Agendada</StatusPill></article>)}</div></section>}
+      {summary.upcoming.length > 0 && <section className="upcoming-section"><div className="section-heading"><div><p className="eyebrow">PRÓXIMOS ENVIOS</p><h2>Já têm hora marcada</h2></div></div><div className="activity-list">{summary.upcoming.map((campaign) => <Link className="activity-row" to={`/editor/${encodeURIComponent(campaign.id)}${campaign.status === 'draft' ? '' : '?copy=1'}`} key={campaign.id}><div className="activity-date">{dateLabel(campaign.publish_date)}</div><div className="activity-main"><strong>{campaign.subject || 'Sem assunto'}</strong><span>Preparada na Buttondown</span></div><StatusPill tone="warning">Agendada</StatusPill></Link>)}</div></section>}
       <section className="quick-create"><div className="quick-glyph">✳</div><div><p className="eyebrow">UMA IDEIA NÃO PRECISA ESPERAR</p><h2>Abra um rascunho e veja no que dá.</h2></div><Link to="/templates" className="subtle-link">Escolher um template <ArrowRight size={15} /></Link></section>
       <p className="data-footnote">{summary.demo ? <StatusPill tone="warning">AMOSTRA FICTÍCIA</StatusPill> : <StatusPill tone="success">DADOS BUTTONDOWN</StatusPill>} <span>{summary.demo ? 'Conecte a API para substituir a demonstração por dados reais.' : 'Indicadores carregados diretamente da API Buttondown.'}</span></p>
     </>}

@@ -1,4 +1,4 @@
-export type NewsletterTemplateId = 'blog' | 'curadoria' | 'especial'
+export type NewsletterTemplateId = 'blog' | 'curadoria' | 'especial' | 'carta' | 'bastidores' | 'convite'
 
 export type DraftRecord = {
   id: string

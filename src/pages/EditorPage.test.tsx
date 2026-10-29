@@ -34,7 +34,7 @@ vi.mock('@react-email/editor', async () => {
 beforeEach(() => { cleanup(); localStorage.clear(); mocks.configured = false; mocks.cloud = false; mocks.save.mockReset(); mocks.saveCloud.mockReset() })
 
 function openEditor() {
-  return render(<RouterProvider router={createMemoryRouter([{ path: '/editor/:id', element: <EditorPage /> }], { initialEntries: ['/editor/new'] })} />)
+  return render(<RouterProvider router={createMemoryRouter([{ path: '/editor/:id', element: <EditorPage /> }], { initialEntries: ['/editor/new?template=blog'] })} />)
 }
 
 it('preserva e salva a edição ao entrar e sair da prévia', async () => {
@@ -59,7 +59,7 @@ it('não restaura o assunto antigo quando uma sincronização termina depois da 
   fireEvent.change(subject, { target: { value: 'Antes da sincronização' } })
   expect(screen.queryByRole('button', { name: 'Salvar local' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Salvar rascunho na Buttondown' })).not.toBeInTheDocument()
-  fireEvent.click(screen.getAllByRole('button', { name: 'Preparar edição' })[0])
+  fireEvent.click(screen.getAllByRole('button', { name: 'Revisar edição' })[0])
   await waitFor(() => expect(mocks.save).toHaveBeenCalledOnce())
   fireEvent.change(subject, { target: { value: 'Escrito durante a sincronização' } })
   finish({ id: 'em_test' })

@@ -22,14 +22,14 @@ function setup(draft = initial) {
   queues.push(queue); queue.configure(status)
   return { queue, session, services }
 }
-it('coalesce digitação com debounce e não cria campanhas automaticamente', async () => {
+it('coalesce digitação e sincroniza o primeiro rascunho automaticamente', async () => {
   const { queue, session, services } = setup()
   for (const subject of ['a', 'ab', 'abc']) { session.edit({ subject }); queue.schedule(); await vi.advanceTimersByTimeAsync(400) }
   expect(services.saveCloudDraft).not.toHaveBeenCalled()
-  await vi.advanceTimersByTimeAsync(600)
+  await vi.advanceTimersByTimeAsync(600); await queue.flush()
   expect(readDrafts()[0].subject).toBe('abc')
-  expect(services.saveCloudDraft).toHaveBeenCalledOnce()
-  expect(services.saveDraft).not.toHaveBeenCalled()
+  expect(services.saveCloudDraft).toHaveBeenCalledTimes(3)
+  expect(services.saveDraft).toHaveBeenCalledOnce()
   expect(queue.label).toBe('Todas as alterações salvas.')
 })
 it('cria uma vez por preparação e atualiza o vínculo automaticamente', async () => {
@@ -52,7 +52,7 @@ it('salva localmente offline, limita retentativas e retoma após reconectar', as
   expect(services.saveCloudDraft).toHaveBeenCalledTimes(4)
   expect(queue.label).toContain('sincronização pendente')
   services.saveCloudDraft.mockImplementation(async d => ({ ...d, cloudRevision: 1 }))
-  await queue.reconnect(); await vi.advanceTimersByTimeAsync(600)
+  await queue.reconnect(); await vi.advanceTimersByTimeAsync(600); await queue.flush()
   expect(queue.label).toBe('Todas as alterações salvas.')
 })
 it('falha local impede chamadas remotas e não declara sucesso', async () => {
@@ -72,8 +72,8 @@ it('serializa alterações durante resposta lenta, preservando a versão atual',
   expect(services.saveCloudDraft).toHaveBeenCalledOnce()
   finish({ ...initial, cloudRevision: 1 }); await running
   await vi.advanceTimersByTimeAsync(600)
-  expect(services.saveCloudDraft).toHaveBeenCalledTimes(2)
-  expect(services.saveCloudDraft).toHaveBeenLastCalledWith(expect.objectContaining({ subject: 'Durante', cloudRevision: 1 }))
+  expect(services.saveCloudDraft).toHaveBeenCalledTimes(3)
+  expect(services.saveCloudDraft).toHaveBeenLastCalledWith(expect.objectContaining({ subject: 'Durante', cloudRevision: 2 }))
 })
 it('conflito remoto preserva a cópia local e interrompe retentativas', async () => {
   const { queue, services } = setup()
@@ -98,8 +98,9 @@ it('reconcilia confirmação D1 perdida antes de repetir uma escrita', async () 
   services.saveCloudDraft.mockRejectedValueOnce(new ApiError('timeout', 0))
   services.cloudDraft.mockResolvedValue({ ...initial, cloudRevision: 1, cloudSavedRevision: 0 })
   await queue.flush()
-  expect(queue.session.value.cloudRevision).toBe(1)
-  expect(services.saveCloudDraft).toHaveBeenCalledOnce()
+  expect(queue.session.value.cloudRevision).toBe(3)
+  expect(services.cloudDraft).toHaveBeenCalledOnce()
+  expect(services.saveCloudDraft).toHaveBeenCalledTimes(3)
 })
 it('outra aba não é sobrescrita nem propagada para os destinos remotos', async () => {
   const first = new DraftSession(initial); first.save()

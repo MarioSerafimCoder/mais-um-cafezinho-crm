@@ -25,6 +25,8 @@ export const api = {
     if (import.meta.env.DEV && import.meta.env.MODE === 'demo') return { configured: false, connected: false, demo: true, cloud: false }
     return request<IntegrationStatus>('/api/status')
   },
+  deleteSubscriber: (id: string) => request<{ deleted: boolean }>(`/api/subscribers/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  deleteCampaign: (draftId?: string, campaignId?: string) => request<{ deleted: boolean; campaignId: string | null }>('/api/remove-campaign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ draftId, campaignId }) }),
   dashboard: () => request<DashboardSummary>('/api/dashboard'),
   cloudDrafts: (cursor?: string) => request<{ results: import('./campaigns').DraftSummary[]; next: string | null }>(`/api/drafts${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
   cloudDraft: (id: string) => request<DraftRecord>(`/api/drafts/${encodeURIComponent(id)}`),

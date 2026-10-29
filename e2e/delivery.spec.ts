@@ -42,7 +42,6 @@ test('editor salva no D1, sincroniza e exige confirmação exata antes do teste 
   await page.getByRole('button', { name: 'Atualizar destinatário e histórico' }).click()
   await expect(page.locator('.test-confirmation-card .test-recipient-address')).toHaveText('owner@example.com')
   await expect(page.getByRole('button', { name: 'Enviar este teste', exact: true })).toBeDisabled()
-  await page.getByRole('checkbox', { name: 'Confirmo o envio de um teste para este endereço.' }).check()
   await send.click()
   await expect(page.getByText(/Teste aceito pela Buttondown/)).toBeVisible()
   await expect(page.getByLabel('Histórico de testes')).toContainText('recebimento pendente')

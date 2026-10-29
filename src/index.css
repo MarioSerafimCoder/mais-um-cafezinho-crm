@@ -178,7 +178,21 @@ a { color: inherit; text-decoration: none; }
 .campaign-info strong { overflow: hidden; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .campaign-info > span { color: var(--ink-3); font-size: 10px; }
 .faint-label { color: var(--amber); font-family: 'DM Mono', monospace; font-size: 8px; letter-spacing: .08em; }
-.campaign-actions { display: flex; justify-content: flex-end; }
+.campaign-actions { display: flex; align-items: center; gap: 12px; justify-content: flex-end; }
+.campaign-actions > a { display: inline-flex; align-items: center; min-height: 38px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 4px; font-weight: 600; font-size: 12px; transition: color .18s, border-color .18s, background .18s; }
+.campaign-actions > a:hover { color: var(--red); background: var(--red-soft); border-color: var(--red); }
+.campaign-actions > button:hover { color: var(--red); background: var(--red-soft); }
+.activity-list > a.activity-row { color: inherit; text-decoration: none; padding-inline: 14px; transition: background .18s, transform .18s; }
+.activity-list > a.activity-row:hover { background: var(--surface); transform: translateX(4px); }
+.activity-list > a.activity-row:hover strong { color: var(--red); }
+.activity-list > a.activity-row:focus-visible, .campaign-actions > a:focus-visible { outline: 2px solid var(--red); outline-offset: 3px; }
+.template-card { transition: transform .2s, box-shadow .2s; }
+.template-card:hover, .template-card:focus-within { transform: translateY(-4px); box-shadow: 0 12px 30px #18171412; }
+.button { transition: background .18s, border-color .18s, transform .12s; }
+.button:active:not(:disabled) { transform: translateY(1px); }
+.delivery-summary { margin: 24px 0; padding: 20px; border: 1px solid var(--line); background: var(--surface); }
+.delivery-summary p { margin: 10px 0 0; }
+@media (prefers-reduced-motion: reduce) { .button, .template-card, .activity-list > a.activity-row { transition: none; transform: none; } }
 .campaign-actions .icon-button { width: 31px; height: 31px; }
 .production-note { display: flex; align-items: center; gap: 11px; margin-top: 22px; padding: 12px 14px; background: var(--surface-2); }
 .note-mark { display: grid; place-items: center; width: 20px; height: 20px; flex: none; color: var(--ink-3); border: 1px solid var(--line-strong); border-radius: 50%; font-family: Georgia, serif; font-size: 12px; font-style: italic; }

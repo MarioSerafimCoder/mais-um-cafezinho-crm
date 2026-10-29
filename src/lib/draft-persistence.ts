@@ -87,7 +87,7 @@ export class DraftPersistence {
         if (this.stopped) return
         const d = this.session.value
         if (prepare && !this.status?.connected) throw new Error('Não foi possível preparar: a conexão com a Buttondown não está confirmada.')
-        if (this.status?.connected && ((!d.buttondownId && prepare) || (d.buttondownId && d.syncedRevision !== (d.revision || 0)))) {
+        if (this.status?.connected && ((!d.buttondownId && Boolean(d.document) && Boolean(d.subject.trim())) || (d.buttondownId && d.syncedRevision !== (d.revision || 0)))) {
           destination = 'buttondown'
           await this.session.sync(this.html, this.services.saveDraft, () => this.cloud())
           destination = 'cloud'

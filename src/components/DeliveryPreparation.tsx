@@ -34,12 +34,10 @@ export function DeliveryPreparation({ draft, onPrepare }: { draft?: DraftRecord;
   const [config, setConfig] = useState<Config | null>(null)
   const [index, setIndex] = useState('0')
   const [attempt, setAttempt] = useState<PreparedAttempt | null>(null)
-  const [confirmed, setConfirmed] = useState(false)
   const [message, setMessage] = useState('Atualize o destinatário e confira o histórico antes de preparar o teste.')
   const [busy, setBusy] = useState(false)
   const run = async (action: () => Promise<void>) => {
     setBusy(true)
-    setConfirmed(false)
     try { await action() }
     catch (error) { setMessage(error instanceof Error ? error.message : 'Falha na preparação.') }
     finally { setBusy(false) }
@@ -88,7 +86,7 @@ export function DeliveryPreparation({ draft, onPrepare }: { draft?: DraftRecord;
 
     {config && !config.enabled && <div className="test-feedback test-feedback-warning" role="status"><AlertCircle size={16} />Teste indisponível ou sem destinatários autorizados.</div>}
     {config?.enabled && <>
-      <label className="test-recipient-field"><span>Destinatário autorizado</span><select disabled={busy || Boolean(attempt)} value={index} onChange={event => { setIndex(event.target.value); setConfirmed(false) }}>{config.recipients.map((email, i) => <option value={i} key={email}>{email}</option>)}</select></label>
+      <label className="test-recipient-field"><span>Destinatário autorizado</span><select disabled={busy || Boolean(attempt)} value={index} onChange={event => { setIndex(event.target.value) }}>{config.recipients.map((email, i) => <option value={i} key={email}>{email}</option>)}</select></label>
       {!ready && <div className={`test-feedback ${onPrepare ? 'test-feedback-neutral' : 'test-feedback-warning'}`} role="status"><Info size={16} />{onPrepare ? 'A edição será salva e sincronizada automaticamente ao preparar o teste.' : 'Salve e sincronize a revisão atual da newsletter antes de preparar o teste.'}</div>}
 
       {!attempt && <Button className="test-action-button" variant="outline" icon={<Mail size={15} />} disabled={busy || (!ready && !onPrepare) || !config.recipients.length} onClick={() => void run(async () => {
@@ -108,9 +106,9 @@ export function DeliveryPreparation({ draft, onPrepare }: { draft?: DraftRecord;
         <div className="test-confirmation-heading"><ShieldCheck size={16} /><strong>Revise antes de enviar</strong></div>
         <span className="test-recipient-label">O teste será enviado para</span>
         <p className="test-recipient-address">{attempt.recipient}</p>
-        <span className="test-revision">Revisão D1 {attempt.cloudRevision}{!current ? ' · revisão desatualizada' : ''}</span>
-        <label className="test-confirm-checkbox"><input type="checkbox" checked={confirmed} disabled={!current || busy} onChange={event => setConfirmed(event.target.checked)} /><span>Confirmo o envio de um teste para este endereço.</span></label>
-        <Button className="test-action-button" icon={<Send size={15} />} disabled={!current || !confirmed || busy} onClick={() => void run(async () => {
+        <span className="test-revision">Versão {attempt.cloudRevision}{!current ? ' · revisão desatualizada' : ''}</span>
+
+        <Button className="test-action-button" icon={<Send size={15} />} disabled={!current || busy} onClick={() => void run(async () => {
           const prepared = attempt
           setAttempt(null)
           try { await call({ draftId: draft?.id, cloudRevision: prepared.cloudRevision, attemptId: prepared.attemptId, confirm: true }) }

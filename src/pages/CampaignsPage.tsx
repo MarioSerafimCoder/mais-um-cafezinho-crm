@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api'
 import { demoCampaigns } from '../data/templates'
-import { downloadDraftBackup, readDrafts, writeDraft } from '../lib/storage'
+import { downloadDraftBackup, readDrafts, writeDraft, removeDraft } from '../lib/storage'
 import { normalizeCampaigns, type DraftSummary, type EditorialCampaign } from '../lib/campaigns'
 import type { Campaign, DraftRecord } from '../types'
 import { Button, DemoNotice, EmptyState, ErrorState, PageTitle, StatusPill } from '../components/ui'
@@ -19,6 +19,9 @@ export function CampaignsPage() {
   const [remoteError, setRemoteError] = useState('')
   const [cloudBusy, setCloudBusy] = useState(false)
   const [remoteBusy, setRemoteBusy] = useState(false)
+  const [deleting, setDeleting] = useState('')
+  const [notice, setNotice] = useState('')
+  const [search, setSearch] = useState('')
   const [reload, setReload] = useState(0)
   const [cursor, setCursor] = useState<string | null>(null)
   const [page, setPage] = useState(1)
@@ -72,12 +75,27 @@ export function CampaignsPage() {
       setLocal(readDrafts())
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível duplicar a edição.') }
   }
-  const campaigns = normalizeCampaigns(local, cloud, remote)
+  const deleteEdition = async (campaign: EditorialCampaign) => {
+    if (deleting) return
+    setDeleting(campaign.id); setError(''); setNotice('')
+    try {
+      const remoteId = campaign.id.startsWith('bd:') ? campaign.id.slice(3) : undefined
+      const draftId = campaign.id.startsWith('doc:') ? campaign.id.slice(4) : campaign.editorId !== remoteId ? campaign.editorId : undefined
+      const result = await api.deleteCampaign(draftId, remoteId)
+      for (const draft of readDrafts()) if (draft.id === draftId || (result.campaignId && draft.buttondownId === result.campaignId)) removeDraft(draft.id)
+      setLocal(readDrafts()); setCloud(items => items.filter(item => item.id !== draftId && (!result.campaignId || item.buttondownId !== result.campaignId))); setRemote(items => items.filter(item => item.id !== result.campaignId))
+      setNotice('Campanha excluída.')
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível excluir a campanha.') }
+    finally { setDeleting('') }
+  }
+  const campaigns = normalizeCampaigns(local, cloud, remote).filter(campaign => campaign.subject.toLocaleLowerCase().includes(search.toLocaleLowerCase()))
   const loading = cloudBusy || remoteBusy
   return <>
     <PageTitle eyebrow="ARQUIVO DE EDIÇÕES" title="Edições" description="Suas edições, da primeira ideia à publicação." action={<Link to="/editor/new"><Button>Nova edição</Button></Link>} />
     <details className="recovery-import"><summary>Recuperar um backup</summary><p>Importe JSON do editor ou de um backup local. Os rascunhos entram como cópias novas, sem substituir edições ou vínculos da Buttondown.</p><input aria-label="Importar cópias de recuperação" type="file" accept="application/json,.json" onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; if (file.size > 5_000_000) { setError('O backup excede o limite de 5 MB.'); return } void file.text().then(async (text) => { const { importRecoveryCopies } = await import('../lib/recovery'); importRecoveryCopies(text); setError(''); setReload((value) => value + 1) }).catch((cause) => setError(cause instanceof Error ? cause.message : 'Falha ao importar backup.')) }} /></details>
 
+    <label className="search-box"><input type="search" placeholder="Buscar edição pelo assunto" aria-label="Buscar edição" value={search} onChange={event => setSearch(event.target.value)} /></label>
+    {notice && <p role="status">{notice}</p>}
     {demo && <DemoNotice />}
     {[error, cloudError, remoteError].filter(Boolean).map(message => <ErrorState key={message} message={message} onRetry={() => { setError(''); setReload(value => value + 1) }} />)}
     {error && <Button variant="outline" onClick={downloadDraftBackup}>Exportar backup dos rascunhos locais</Button>}
@@ -89,6 +107,7 @@ export function CampaignsPage() {
       <div className="campaign-actions">
         {campaign.status === 'draft' && !campaign.demo && <Link to={'/editor/' + encodeURIComponent(campaign.editorId!)}>{campaign.editorialState === 'Preparada para revisão' ? 'Revisar edição' : 'Continuar edição'}</Link>}
         {campaign.status !== 'draft' && campaign.absolute_url && <a href={campaign.absolute_url} target="_blank" rel="noreferrer">Visualizar publicação</a>}
+        {!campaign.demo && <Button variant="quiet" size="sm" disabled={Boolean(deleting)} onClick={() => void deleteEdition(campaign)} aria-label={`Excluir campanha ${campaign.subject}`}>{deleting === campaign.id ? 'Excluindo…' : 'Excluir campanha'}</Button>}
         {!campaign.demo && <details className="campaign-more"><summary aria-label={`Mais ações para ${campaign.subject}`}>Mais</summary><Button size="sm" variant="quiet" onClick={() => void duplicate(campaign)}>Duplicar edição</Button></details>}
       </div>
     </article>)}</div>

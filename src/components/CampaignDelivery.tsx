@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, CheckCircle2, ChevronDown, Eye, Info, LockKeyhole, Users } from 'lucide-react'
+import { AlertCircle, CheckCircle2, ChevronDown, Send, Info, LockKeyhole, Users } from 'lucide-react'
 import { api } from '../lib/api'
-import type { ApiPage, DraftRecord, PreparedCampaignDelivery, Subscriber } from '../types'
+import type { ApiPage, DraftRecord, Subscriber } from '../types'
 import { Button } from './ui'
 
 const pageSize = 25
@@ -18,8 +18,6 @@ export function CampaignDelivery({ draft, onPrepare }: { draft: DraftRecord; onP
   const [page, setPage] = useState(1)
   const [pages, setPages] = useState<ActivePages | null>(null)
   const [loadingContacts, setLoadingContacts] = useState(false)
-  const [prepared, setPrepared] = useState<PreparedCampaignDelivery | null>(null)
-  const [confirmed, setConfirmed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -80,43 +78,20 @@ export function CampaignDelivery({ draft, onPrepare }: { draft: DraftRecord; onP
     })
   }
 
-  const prepare = async () => {
-    if (!current && !onPrepare) return
-    setBusy(true); setError(''); setMessage(''); setConfirmed(false)
+  const send = async () => {
+    if (busy || deliveryAccepted) return
+    setBusy(true); setError(''); setMessage('')
     try {
       const latest = onPrepare ? await onPrepare() : draft
-      if (!latest.buttondownId || !latest.cloudRevision || latest.revision !== latest.syncedRevision || latest.revision !== latest.cloudSavedRevision) throw new Error('Não foi possível sincronizar a revisão atual. Confira a conexão e tente novamente.')
-      const audience = mode === 'all_active'
-        ? { mode: 'all_active' }
-        : { mode: 'selected', subscriberIds: selectedRows.map((subscriber) => subscriber.id) }
-      const result = await api.campaignDelivery({ action: 'prepare', draftId: latest.id, cloudRevision: latest.cloudRevision, audience })
-      if (!result.attemptId || !result.audienceMode || !result.recipientCount || !result.cloudRevision || !result.subject || !result.expiresAt) throw new Error('A Buttondown não retornou uma preparação válida.')
-      setPrepared(result as PreparedCampaignDelivery)
-      setMessage('Prévia pronta. Confira a audiência e confirme somente se estiver correta.')
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível preparar o envio.') }
-    finally { setBusy(false) }
-  }
-
-  const cancel = async () => {
-    if (!prepared) return
-    setBusy(true); setError(''); setConfirmed(false)
-    try {
-      await api.campaignDelivery({ action: 'cancel', draftId: draft.id, cloudRevision: prepared.cloudRevision, attemptId: prepared.attemptId })
-      setPrepared(null); setMessage('Preparação cancelada. Nenhum e-mail foi enviado.')
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível cancelar a preparação.') }
-    finally { setBusy(false) }
-  }
-
-  const send = async () => {
-    if (!prepared) return
-    const attempt = prepared
-    setPrepared(null); setBusy(true); setError(''); setMessage('')
-    try {
-      const result = await api.campaignDelivery({ action: 'confirm', draftId: draft.id, cloudRevision: attempt.cloudRevision, attemptId: attempt.attemptId, confirm: true })
-      if (!result.accepted) throw new Error('A Buttondown não confirmou a aceitação. Consulte o histórico antes de qualquer outra tentativa.')
+      if (!latest.buttondownId || !latest.cloudRevision || latest.revision !== latest.syncedRevision || latest.revision !== latest.cloudSavedRevision) throw new Error('Não foi possível sincronizar. Confira sua conexão e tente novamente.')
+      const audience = mode === 'all_active' ? { mode: 'all_active' } : { mode: 'selected', subscriberIds: selectedRows.map(subscriber => subscriber.id) }
+      const attempt = await api.campaignDelivery({ action: 'prepare', draftId: latest.id, cloudRevision: latest.cloudRevision, audience })
+      if (!attempt.attemptId || !attempt.cloudRevision || !attempt.recipientCount) throw new Error('Não foi possível preparar o envio.')
+      const result = await api.campaignDelivery({ action: 'confirm', draftId: latest.id, cloudRevision: attempt.cloudRevision, attemptId: attempt.attemptId, confirm: true })
+      if (!result.accepted) throw new Error('A Buttondown ainda não confirmou o envio. Consulte o histórico antes de tentar novamente.')
       setMessage(`A Buttondown aceitou o envio para ${attempt.recipientCount} ${attempt.recipientCount === 1 ? 'contato' : 'contatos'}.`)
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Resultado incerto. Consulte a Buttondown antes de qualquer outra tentativa.') }
-    finally { setBusy(false); setConfirmed(false) }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível concluir o envio.') }
+    finally { setBusy(false) }
   }
 
   return <details className="inspector-section campaign-delivery">
@@ -138,15 +113,11 @@ export function CampaignDelivery({ draft, onPrepare }: { draft: DraftRecord; onP
     </div>}
     {enabled === null && !error && <div className="campaign-state-panel" role="status"><span className="campaign-spinner" />Verificando autorização de envio…</div>}
     {enabled === true && <>
-      <p className="campaign-delivery-intro">Escolha a audiência, revise a prévia e confirme o envio.</p>
-      <ol className="campaign-flow" aria-label="Etapas do envio de campanha">
-        <li className={prepared || deliveryAccepted ? 'is-done' : 'is-current'}><span>{prepared || deliveryAccepted ? <CheckCircle2 size={12} /> : '1'}</span>Audiência</li>
-        <li className={prepared && !confirmed ? 'is-current' : confirmed || deliveryAccepted ? 'is-done' : ''}><span>{confirmed || deliveryAccepted ? <CheckCircle2 size={12} /> : '2'}</span>Prévia</li>
-        <li className={deliveryAccepted ? 'is-done' : confirmed ? 'is-current' : ''}><span>{deliveryAccepted ? <CheckCircle2 size={12} /> : '3'}</span>Confirmar</li>
-      </ol>
+      <p className="campaign-delivery-intro">Escolha quem vai receber. O salvamento e a sincronização são automáticos.</p>
+
     </>}
     {enabled && <>
-      <fieldset className="delivery-audience-options" disabled={busy || Boolean(prepared)}>
+      <fieldset className="delivery-audience-options" disabled={busy || deliveryAccepted}>
         <legend>Escolha a audiência</legend>
         <label className={`delivery-audience-option${mode === 'all_active' ? ' is-selected' : ''}`}>
           <input type="radio" name={`audience-${draft.id}`} checked={mode === 'all_active'} onChange={() => setMode('all_active')} />
@@ -160,29 +131,20 @@ export function CampaignDelivery({ draft, onPrepare }: { draft: DraftRecord; onP
         </label>
       </fieldset>
       {mode === 'selected' && <div className="delivery-contact-picker">
-        <label className="field"><span className="field-label">Buscar contatos ativos</span><input type="search" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Nome ou e-mail" disabled={busy || Boolean(prepared)} /></label>
+        <label className="field"><span className="field-label">Buscar contatos ativos</span><input type="search" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Nome ou e-mail" disabled={busy || deliveryAccepted} /></label>
         {loadingContacts ? <p role="status">Carregando contatos ativos…</p> : <div className="delivery-contact-list">
           {contacts.map((contact) => {
             const name = typeof contact.metadata?.name === 'string' ? contact.metadata.name : ''
-            return <label key={contact.id}><input type="checkbox" checked={Boolean(selected[contact.id])} disabled={busy || Boolean(prepared) || (!selected[contact.id] && selectedRows.length >= selectedLimit)} onChange={() => toggleSubscriber(contact)} /><span>{name || contact.email_address}<small>{name ? contact.email_address : contact.type === 'premium' ? 'Premium' : 'Ativo'}</small></span></label>
+            return <label key={contact.id}><input type="checkbox" checked={Boolean(selected[contact.id])} disabled={busy || deliveryAccepted || (!selected[contact.id] && selectedRows.length >= selectedLimit)} onChange={() => toggleSubscriber(contact)} /><span>{name || contact.email_address}<small>{name ? contact.email_address : contact.type === 'premium' ? 'Premium' : 'Ativo'}</small></span></label>
           })}
           {contacts.length === 0 && <p>Nenhum contato ativo nesta página.</p>}
         </div>}
-        <div className="delivery-contact-pagination"><span>Página {page} de {totalPages}</span><div><button type="button" disabled={page <= 1 || loadingContacts || Boolean(prepared)} onClick={() => setPage((value) => Math.max(1, value - 1))}>Anterior</button><button type="button" disabled={page >= totalPages || loadingContacts || Boolean(prepared)} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Próxima</button></div></div>
+        <div className="delivery-contact-pagination"><span>Página {page} de {totalPages}</span><div><button type="button" disabled={page <= 1 || loadingContacts || deliveryAccepted} onClick={() => setPage((value) => Math.max(1, value - 1))}>Anterior</button><button type="button" disabled={page >= totalPages || loadingContacts || deliveryAccepted} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Próxima</button></div></div>
         {selectedRows.length > 0 && <div className="delivery-selected-list"><strong>Selecionados ({selectedRows.length}/{selectedLimit})</strong>{selectedRows.map((contact) => <span key={contact.id}>{contact.email_address}</span>)}</div>}
       </div>}
-      {!prepared && <Button className="campaign-prepare-button" size="sm" icon={<Eye size={15} />} disabled={busy || (!current && !onPrepare) || audienceCount < 1 || (mode === 'selected' && !selectedRows.length)} onClick={() => void prepare()}>{busy ? 'Salvando e preparando…' : 'Revisar prévia e contagem'}</Button>}
-      {!current && <p className="inspector-hint">{onPrepare ? 'A edição será salva e sincronizada automaticamente antes da prévia.' : 'Salve o rascunho no D1 e sincronize a revisão atual na Buttondown antes de preparar o envio.'}</p>}
-      {prepared && <div className="campaign-delivery-preview">
-        <span className="inspector-label">PRÉVIA · REVISÃO D1 {prepared.cloudRevision}</span>
-        <p><strong>Assunto:</strong> {prepared.subject}</p>
-        <p><strong>Destinatários:</strong> {prepared.audienceMode === 'all_active' ? 'todos os assinantes ativos' : 'contatos selecionados'} · {prepared.recipientCount}</p>
-        {prepared.audienceMode === 'selected' && <ul>{(prepared.selectedRecipients || []).map((contact) => <li key={contact.id}>{contact.email_address}</li>)}</ul>}
-        <iframe title="Prévia segura da campanha" sandbox="" referrerPolicy="no-referrer" srcDoc={draft.content} />
-        <label className="delivery-final-confirm"><input type="checkbox" checked={confirmed} disabled={busy || !current} onChange={(event) => setConfirmed(event.target.checked)} />Confirmo o envio imediato deste assunto para {prepared.recipientCount} {prepared.recipientCount === 1 ? 'contato ativo' : 'contatos ativos'}.</label>
-        <div className="delivery-final-actions"><Button size="sm" variant="outline" disabled={busy} onClick={() => void cancel()}>Cancelar</Button><Button size="sm" variant="danger" disabled={busy || !confirmed || !current} onClick={() => void send()}>{busy ? 'Enviando…' : 'Confirmar e enviar agora'}</Button></div>
-        {!current && <p role="alert">A revisão mudou. Esta prévia não pode ser enviada; prepare novamente após sincronizar.</p>}
-      </div>}
+      <div className="delivery-summary"><span className="inspector-label">PRONTO PARA ENVIAR</span><p><strong>{draft.subject}</strong></p><p>{audienceCount} {audienceCount === 1 ? 'destinatário' : 'destinatários'} · {mode === 'all_active' ? 'Todos os assinantes ativos' : 'Contatos selecionados'}</p></div>
+      {!deliveryAccepted && <Button className="campaign-prepare-button" icon={<Send size={16} />} disabled={busy || (!current && !onPrepare) || audienceCount < 1} onClick={() => void send()}>{busy ? 'Sincronizando e enviando…' : `Enviar agora para ${audienceCount} ${audienceCount === 1 ? 'contato' : 'contatos'}`}</Button>}
+
     </>}
     {error && <div className="campaign-feedback campaign-feedback-error" role="alert"><AlertCircle size={16} /><div><strong>Não foi possível concluir</strong><span>{error}</span></div></div>}
     {!error && message && <div className={`campaign-feedback${deliveryAccepted ? ' campaign-feedback-success' : ''}`} role="status">

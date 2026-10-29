@@ -85,7 +85,7 @@ export class DraftSession {
       const response = await send({ id: snapshot.buttondownId, subject: pending.subject, body: pending.body, description: pending.description, buttondownTemplate: pending.template, createKey: pending.key, expectedBodyHash: snapshot.syncedBodyHash })
       if (!response.id) throw new Error('A Buttondown não retornou o identificador do rascunho.')
       const syncedBodyHash = await bodyHash(typeof response.body === 'string' ? response.body : pending.body)
-      this.value = { ...this.value, buttondownId: response.id, lastSyncedAt: new Date().toISOString(), syncedRevision: pending.revision, syncedBodyHash, pendingCreate: undefined, cloudSavedRevision: undefined }
+      this.value = { ...this.value, content: pending.body, buttondownId: response.id, lastSyncedAt: new Date().toISOString(), syncedRevision: pending.revision, syncedBodyHash, pendingCreate: undefined, cloudSavedRevision: undefined }
       this.save()
       return response
     } finally { this.syncing = false; this.emit() }

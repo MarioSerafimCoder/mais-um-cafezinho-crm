@@ -29,7 +29,7 @@ it('mostra o bloqueio de campanhas com clareza e não expõe controles de audiê
   expect(screen.getByText('Nenhum assinante será contatado.')).toBeInTheDocument()
 })
 
-it('prepara a audiência e só envia depois da confirmação explícita', async () => {
+it('prepara e envia com um único clique, sem confirmação extra', async () => {
   mocks.status.mockResolvedValue({ enabled: true, activeCount: 12 })
   mocks.delivery
     .mockResolvedValueOnce({ attemptId: 'attempt-campaign', audienceMode: 'all_active', recipientCount: 12, cloudRevision: 1, subject: draft.subject, expiresAt: new Date(Date.now() + 60_000).toISOString() })
@@ -37,15 +37,10 @@ it('prepara a audiência e só envia depois da confirmação explícita', async 
   render(<CampaignDelivery draft={draft} />)
 
   screen.getByText('Enviar campanha').closest('summary')?.click()
-  const prepare = await screen.findByRole('button', { name: 'Revisar prévia e contagem' })
-  expect(prepare).toBeEnabled()
-  fireEvent.click(prepare)
-  await waitFor(() => expect(document.querySelector('.campaign-delivery-preview')).toHaveTextContent('12'))
-  expect(mocks.delivery).toHaveBeenCalledTimes(1)
-  const send = screen.getByRole('button', { name: 'Confirmar e enviar agora' })
-  expect(send).toBeDisabled()
-
-  fireEvent.click(screen.getByRole('checkbox', { name: /Confirmo o envio imediato deste assunto para 12 contatos ativos/ }))
+  const send = await screen.findByRole('button', { name: 'Enviar agora para 12 contatos' })
+  expect(send).toBeEnabled()
+  expect(mocks.delivery).not.toHaveBeenCalled()
+  expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
   fireEvent.click(send)
   await waitFor(() => expect(mocks.delivery).toHaveBeenCalledTimes(2))
   expect(mocks.delivery.mock.calls[1][0]).toMatchObject({ action: 'confirm', confirm: true, attemptId: 'attempt-campaign' })

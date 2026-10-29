@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Search, ChevronLeft, ChevronRight, ShieldCheck, UserRound, UserPlus, Mail, CircleCheck } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, ShieldCheck, UserRound, UserPlus, Mail, CircleCheck, Trash2 } from 'lucide-react'
 import { api, requireConnection } from '../lib/api'
 import { demoSubscribers } from '../data/templates'
 import type { ApiPage, IntegrationStatus, Subscriber } from '../types'
@@ -65,6 +65,24 @@ export function SubscribersPage() {
     return () => { active = false }
   }, [page, query, reload, requestKey])
 
+  useEffect(() => {
+    const refresh = () => { if (document.visibilityState === 'visible') setReload(value => value + 1) }
+    window.addEventListener('focus', refresh)
+    const timer = window.setInterval(refresh, 60000)
+    return () => { window.removeEventListener('focus', refresh); window.clearInterval(timer) }
+  }, [])
+
+  const deleteContact = async (subscriber: Subscriber) => {
+    if (processingEmail) return
+    setProcessingEmail(subscriber.email_address); setCreateError(''); setCreateMessage('')
+    try {
+      await api.deleteSubscriber(subscriber.id)
+      setCreateMessage(`Contato excluído da base: ${subscriber.email_address}.`)
+      setPage(1); setReload(value => value + 1)
+    } catch (cause) { setCreateError(cause instanceof Error ? cause.message : 'Não foi possível excluir o contato.') }
+    finally { setProcessingEmail('') }
+  }
+
   const loading = loadedKey !== requestKey
   const visibleError = loading ? '' : error
   const activeRows = useMemo(() => pageData?.results || [], [pageData])
@@ -95,7 +113,7 @@ export function SubscribersPage() {
   }
 
   return <>
-    <PageTitle eyebrow="LISTA DE LEITORES" title="Assinantes" description="Uma boa lista cresce com consentimento — e sem atalhos esquisitos." />
+    <PageTitle eyebrow="LISTA DE LEITORES" title="Assinantes" description="Sua base de leitores, atualizada automaticamente." />
     {status?.demo && <DemoNotice />}
     {status?.configured && <section className="subscriber-create-panel" aria-labelledby="subscriber-create-title">
       <div className="subscriber-create-heading">
@@ -117,12 +135,12 @@ export function SubscribersPage() {
     {visibleError && <ErrorState message={visibleError} onRetry={() => { setError(''); setReload((value) => value + 1) }} />}
     {loading && <LoadingState label="Buscando assinantes…" />}
     {!loading && !error && <>
-      <div className="table-scroll"><table className="data-table"><thead><tr><th>LEITOR</th><th>STATUS</th><th>ORIGEM</th><th>DESDE</th></tr></thead><tbody>
+      <div className="table-scroll"><table className="data-table"><thead><tr><th>LEITOR</th><th>STATUS</th><th>ORIGEM</th><th>DESDE</th><th>AÇÕES</th></tr></thead><tbody>
         {activeRows.map((subscriber) => { const name = typeof subscriber.metadata?.name === 'string' ? subscriber.metadata.name : ''; return <tr key={subscriber.id}>
           <td><div className="subscriber-cell"><span className="subscriber-avatar"><UserRound size={15} /></span><div><strong>{name || subscriber.email_address}</strong>{name && <small>{subscriber.email_address}</small>}</div></div></td>
           <td><div className="subscriber-status-cell"><StatusPill tone={statusTone(subscriber.type)}>{displayStatus(subscriber.type)}</StatusPill>{subscriber.type === 'unactivated' && <Button className="subscriber-activate-button" size="sm" variant="outline" disabled={Boolean(processingEmail)} onClick={() => void addSubscriber(subscriber.email_address)}>{processingEmail === subscriber.email_address ? 'Ativando…' : 'Ativar'}</Button>}</div></td>
           <td>{subscriber.source ? subscriber.source.replaceAll('_', ' ') : '—'}</td>
-          <td>{subscriber.creation_date ? subscriberDateLabel(subscriber.creation_date) : '—'}</td>
+          <td>{subscriber.creation_date ? subscriberDateLabel(subscriber.creation_date) : '—'}</td><td>{status?.configured && <Button variant="quiet" size="sm" icon={<Trash2 size={14} />} disabled={Boolean(processingEmail)} onClick={() => void deleteContact(subscriber)} aria-label={`Excluir ${subscriber.email_address}`}>Excluir contato</Button>}</td>
         </tr>})}
       </tbody></table></div>
       {activeRows.length === 0 && <div className="table-empty">{query ? `Nenhum assinante encontrado para “${query}”.` : 'Nenhum assinante nesta página.'}</div>}

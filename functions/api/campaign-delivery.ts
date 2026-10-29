@@ -124,11 +124,14 @@ export async function onRequestPost(context: Context) {
       const now = new Date().toISOString()
       const expiresBefore = new Date(Date.now() - preparationLifetimeMs).toISOString()
       await db.prepare("UPDATE campaign_send_attempts SET state = 'expired' WHERE campaign_id = ? AND state = 'prepared' AND created_at < ?").bind(draft.buttondownId, expiresBefore).run()
-      const existing = await db.prepare("SELECT id, state FROM campaign_send_attempts WHERE campaign_id = ? AND state IN ('prepared', 'attempted', 'accepted')").bind(draft.buttondownId).first<{ id: string; state: string }>()
-      if (existing) return json({ error: existing.state === 'attempted' ? 'O resultado da tentativa anterior é incerto; consulte a Buttondown antes de qualquer novo envio.' : 'Esta campanha já tem uma preparação ou envio registrado.', state: existing.state }, 409)
-
-      const attemptId = crypto.randomUUID()
+      const existing = await db.prepare("SELECT * FROM campaign_send_attempts WHERE campaign_id = ? AND state IN ('prepared', 'attempted', 'accepted')").bind(draft.buttondownId).first<Attempt>()
       const campaignHash = await campaignFingerprint(campaign)
+      if (existing && existing.state !== 'prepared') return json({ error: existing.state === 'attempted' ? 'O resultado do envio anterior ainda não foi confirmado. Consulte o histórico antes de reenviar.' : 'Esta campanha já foi enviada.', state: existing.state }, 409)
+      if (existing && existing.draft_id === draft.id && existing.cloud_revision === draft.cloudRevision && existing.campaign_hash === campaignHash && existing.audience_mode === audience.mode && existing.subscriber_ids === subscriberIds && existing.audience_count === recipientCount) {
+        return json({ attemptId: existing.id, audienceMode: audience.mode, recipientCount, cloudRevision: draft.cloudRevision, subject: campaign.subject, selectedRecipients, expiresAt: new Date(Date.parse(existing.created_at) + preparationLifetimeMs).toISOString() })
+      }
+      if (existing) await db.prepare("UPDATE campaign_send_attempts SET state = 'cancelled' WHERE id = ? AND state = 'prepared'").bind(existing.id).run()
+      const attemptId = crypto.randomUUID()
       const inserted = await db.prepare('INSERT OR IGNORE INTO campaign_send_attempts (id, draft_id, cloud_revision, campaign_id, audience_mode, subscriber_ids, audience_count, campaign_hash, subject, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
         .bind(attemptId, draft.id, draft.cloudRevision, draft.buttondownId, audience.mode, subscriberIds, recipientCount, campaignHash, campaign.subject, now).run()
       if (!inserted.meta.changes) return json({ error: 'Esta campanha acabou de ser preparada em outra sessão. Consulte o estado antes de repetir.' }, 409)

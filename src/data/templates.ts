@@ -76,6 +76,38 @@ export const templates: NewsletterTemplate[] = [
 <h2>O que muda quando voltamos</h2>
 <p>Talvez nada. Ainda assim, olhar de novo é uma forma modesta de não deixar a primeira impressão decidir tudo. Se você tiver outra leitura, responda esta mensagem. A conversa continua melhor quando não termina numa conclusão redonda.</p>${signature}`,
   },
+  {
+    id: 'carta', number: '04', name: 'Carta do estúdio', category: 'CONVERSA',
+    summary: 'Uma carta breve e pessoal, com abertura acolhedora e uma ideia em destaque.',
+    subject: 'Puxa uma cadeira. O café está pronto.', preheader: 'Uma pausa para conversar sobre o que tem ocupado o estúdio.', buttondownTemplate: 'classic',
+    content: `<p style="color:#b52930;font-size:12px;letter-spacing:2px">UMA PAUSA NO DIA</p><h1>Entre um café e uma ideia</h1>
+<p>Olá,</p><p>Hoje eu queria dividir uma observação pequena. Daquelas que aparecem no meio do trabalho e ficam pedindo espaço até a gente escrever.</p>
+<blockquote><p>Nem toda ideia precisa começar grande. Algumas só precisam de atenção.</p></blockquote>
+<p>Conte aqui o que você percebeu, o que mudou na sua semana ou qual pergunta ainda está aberta. Uma carta funciona quando parece uma conversa.</p>
+<p><strong>E por aí?</strong><br />Responda este e-mail e me conte o que tem chamado sua atenção.</p>${signature}`,
+  },
+  {
+    id: 'bastidores', number: '05', name: 'Bastidores de um projeto', category: 'PROCESSO',
+    summary: 'Do desafio à solução: uma história de projeto com decisões, aprendizados e um convite para conhecer o resultado.',
+    subject: 'Por dentro do processo', preheader: 'O caminho, as escolhas e os detalhes que a entrega final não mostra.', buttondownTemplate: 'classic',
+    content: `<p style="color:#b52930;font-size:12px;letter-spacing:2px">CADERNO DE PROCESSO</p><h1>O que acontece antes da entrega</h1>
+<p>Um projeto não cabe só na imagem final. Aqui estão as escolhas que ajudaram a dar forma ao resultado.</p>
+<h2>01 / O desafio</h2><p>Apresente o contexto: quem precisava dessa solução e qual problema merecia ser resolvido?</p>
+<hr /><h2>02 / A decisão que mudou tudo</h2><p>Mostre uma escolha concreta de direção de arte. Se quiser, insira uma imagem do processo e explique o que ela revela.</p>
+<blockquote><p>O melhor detalhe é aquele que tem uma razão para estar ali.</p></blockquote>
+<h2>03 / O resultado</h2><p>Conte o que o projeto tornou possível e qual aprendizado você leva para o próximo.</p>
+<p><a href="https://marioserafim.com.br" style="display:inline-block;background-color:#b52930;color:#ffffff;text-decoration:none;font-weight:bold;padding:13px 19px">Conhecer o projeto →</a></p>${signature}`,
+  },
+  {
+    id: 'convite', number: '06', name: 'Um convite especial', category: 'ENCONTRO',
+    summary: 'Uma chamada direta para lançamento, encontro ou novidade, com as informações essenciais e um botão de ação.',
+    subject: 'Tem novidade chegando ao estúdio', preheader: 'Um convite para acompanhar o próximo capítulo.', buttondownTemplate: 'classic',
+    content: `<p style="color:#b52930;font-size:12px;letter-spacing:2px">RESERVE UMA PAUSA</p><h1>Vamos nos encontrar?</h1>
+<p><em>Uma boa conversa merece espaço na agenda.</em></p><p>Apresente o encontro ou lançamento e conte por que ele pode interessar a quem está lendo. Comece pelo motivo do convite.</p>
+<h2>O que você vai encontrar</h2><ul><li>Uma ideia para levar para o seu trabalho.</li><li>Referências e experiências compartilhadas.</li><li>Espaço para perguntas e novas conversas.</li></ul>
+<hr /><p><strong>Quando:</strong> informe a data e o horário.<br /><strong>Onde:</strong> informe o local ou endereço do encontro.</p>
+<p><a href="https://marioserafim.com.br" style="display:inline-block;background-color:#b52930;color:#ffffff;text-decoration:none;font-weight:bold;padding:13px 19px">Ver todos os detalhes →</a></p><p>Troque o endereço do botão pelo link do seu convite antes de enviar.</p>${signature}`,
+  },
 ]
 
 export function getTemplate(id: NewsletterTemplateId | null | undefined, settings?: NewsletterSettings) {
