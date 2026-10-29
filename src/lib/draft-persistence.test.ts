@@ -4,6 +4,7 @@ import { DraftSession } from './draft-session'
 import { ApiError } from './api'
 import { readDrafts } from './storage'
 import type { DraftRecord } from '../types'
+import { migrateDraft } from './editor-migration'
 
 const initial: DraftRecord = { id: 'local-queue', subject: 'Texto', content: '<p>Texto</p>', document: { type: 'doc', content: [{ type: 'paragraph' }] }, templateId: null, status: 'draft', updatedAt: '2026-10-28T12:00:00Z', revision: 0 }
 const status = { configured: true, connected: true, cloud: true, demo: false }
@@ -22,6 +23,18 @@ function setup(draft = initial) {
   queues.push(queue); queue.configure(status)
   return { queue, session, services }
 }
+it('migração salva no D1 sem alterar Buttondown até haver edição', async () => {
+  const migrated = migrateDraft({ ...initial, schemaVersion: 2, revision: 4, syncedRevision: 4, buttondownId: 'em_existing' })
+  const { queue, session, services } = setup(migrated)
+  await queue.flush()
+  expect(services.saveCloudDraft).toHaveBeenCalledOnce()
+  expect(services.saveDraft).not.toHaveBeenCalled()
+  expect(queue.label).toBe('Todas as alterações salvas.')
+  session.edit({ subject: 'Edição após migração' })
+  await queue.flush()
+  expect(services.saveDraft).toHaveBeenCalledOnce()
+  expect(session.value.revision).toBe(5)
+})
 it('coalesce digitação e sincroniza o primeiro rascunho automaticamente', async () => {
   const { queue, session, services } = setup()
   for (const subject of ['a', 'ab', 'abc']) { session.edit({ subject }); queue.schedule(); await vi.advanceTimersByTimeAsync(400) }

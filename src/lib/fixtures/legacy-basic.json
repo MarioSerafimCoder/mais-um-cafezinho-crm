@@ -1,0 +1,248 @@
+{
+  "id": "local-69990f12-dbd7-42f9-be9a-261d399ef56b",
+  "subject": "O que vem antes do logo",
+  "description": "Uma conversa sobre as decisões que aparecem antes da primeira tela.",
+  "buttondownTemplate": "classic",
+  "editionDate": "2026-10-29",
+  "content": "<h1>Um bom projeto começa antes do logo</h1>\n<p>O logo costuma chegar no fim da conversa — embora seja a primeira coisa que todo mundo pergunta. Antes dele vêm as perguntas menos fotogênicas: o que precisa mudar, para quem, e por que alguém deveria se importar?</p>\n<h2>A parte que não cabe numa prancha</h2>\n<p>Identidade visual não é uma coleção de peças bonitas. É um jeito de organizar percepção e tomar decisões com alguma coerência, inclusive quando ninguém está olhando para a apresentação.</p>\n<blockquote><p>Se a estratégia só aparece no slide de estratégia, talvez ela ainda não tenha chegado ao projeto.</p></blockquote>\n<p>Escrevi mais sobre esse começo — e sobre a tentação de pular direto para a forma — no blog.</p>\n<p><a href=\"https://marioserafim.com.br/blog\" style=\"display:inline-block;background-color:#b52930;color:#ffffff;text-decoration:none;font-weight:bold;padding:13px 19px\">Continuar a leitura&nbsp;→</a></p><hr />\n<p>Até a próxima,<br /><strong>Mário Serafim</strong> · Diretor de arte.</p>\n<p><a href=\"https://marioserafim.com.br\">Portfólio</a> &nbsp;·&nbsp; <a href=\"https://marioserafim.com.br/blog\">Blog</a></p>\n<p>Se uma ideia ficar na cabeça, responda este e-mail. Eu leio.</p>",
+  "templateId": "blog",
+  "status": "draft",
+  "updatedAt": "2026-10-29T11:45:11.292Z",
+  "revision": 1,
+  "document": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "container",
+        "content": [
+          {
+            "type": "heading",
+            "attrs": {
+              "style": "",
+              "alignment": null,
+              "class": "",
+              "level": 1
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Um bom projeto começa antes do logo"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "style": "",
+              "alignment": null,
+              "class": ""
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "O logo costuma chegar no fim da conversa — embora seja a primeira coisa que todo mundo pergunta. Antes dele vêm as perguntas menos fotogênicas: o que precisa mudar, para quem, e por que alguém deveria se importar?"
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "style": "",
+              "alignment": null,
+              "class": "",
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "A parte que não cabe numa prancha"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "style": "",
+              "alignment": null,
+              "class": ""
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Identidade visual não é uma coleção de peças bonitas. É um jeito de organizar percepção e tomar decisões com alguma coerência, inclusive quando ninguém está olhando para a apresentação."
+              }
+            ]
+          },
+          {
+            "type": "blockquote",
+            "attrs": {
+              "style": "",
+              "alignment": null,
+              "class": ""
+            },
+            "content": [
+              {
+                "type": "paragraph",
+                "attrs": {
+                  "style": "",
+                  "alignment": null,
+                  "class": ""
+                },
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Se a estratégia só aparece no slide de estratégia, talvez ela ainda não tenha chegado ao projeto."
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "style": "",
+              "alignment": null,
+              "class": ""
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Escrevi mais sobre esse começo — e sobre a tentação de pular direto para a forma — no blog."
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "style": "",
+              "alignment": null,
+              "class": ""
+            },
+            "content": [
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "link",
+                    "attrs": {
+                      "style": "display:inline-block;background-color:#b52930;color:#ffffff;text-decoration:none;font-weight:bold;padding:13px 19px",
+                      "class": "",
+                      "href": "https://marioserafim.com.br/blog",
+                      "target": "_blank",
+                      "rel": "noopener noreferrer nofollow",
+                      "title": null,
+                      "ses:no-track": null
+                    }
+                  }
+                ],
+                "text": "Continuar a leitura →"
+              }
+            ]
+          },
+          {
+            "type": "horizontalRule",
+            "attrs": {
+              "style": "",
+              "class": ""
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "style": "",
+              "alignment": null,
+              "class": ""
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Até a próxima,"
+              },
+              {
+                "type": "hardBreak"
+              },
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "bold"
+                  }
+                ],
+                "text": "Mário Serafim"
+              },
+              {
+                "type": "text",
+                "text": " · Diretor de arte."
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "style": "",
+              "alignment": null,
+              "class": ""
+            },
+            "content": [
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "link",
+                    "attrs": {
+                      "style": "",
+                      "class": "",
+                      "href": "https://marioserafim.com.br",
+                      "target": "_blank",
+                      "rel": "noopener noreferrer nofollow",
+                      "title": null,
+                      "ses:no-track": null
+                    }
+                  }
+                ],
+                "text": "Portfólio"
+              },
+              {
+                "type": "text",
+                "text": "  ·  "
+              },
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "link",
+                    "attrs": {
+                      "style": "",
+                      "class": "",
+                      "href": "https://marioserafim.com.br/blog",
+                      "target": "_blank",
+                      "rel": "noopener noreferrer nofollow",
+                      "title": null,
+                      "ses:no-track": null
+                    }
+                  }
+                ],
+                "text": "Blog"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "style": "",
+              "alignment": null,
+              "class": ""
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Se uma ideia ficar na cabeça, responda este e-mail. Eu leio."
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "schemaVersion": 2
+}

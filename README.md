@@ -84,3 +84,5 @@ functions/           Proxy seguro das rotas da Buttondown e middleware Access
 public/_routes.json  Rotas que passam pelo middleware das Pages Functions
 wrangler.toml        Configuração do Cloudflare Pages
 ```
+
+Editor atual: GrapesJS OSS + MJML. Consulte [migração, recuperação e limitações](docs/GRAPESJS-MIGRATION.md).

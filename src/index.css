@@ -694,3 +694,57 @@ a { color: inherit; text-decoration: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* GrapesJS is the single editorial canvas. */
+.grapes-page { max-width: 1720px; margin: 0 auto; }
+.grapes-page-top { display: flex; justify-content: space-between; align-items: center; gap: 20px; font-size: 12px; color: var(--ink-3); margin-bottom: 24px; }
+.grapes-page-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
+.grapes-page-heading > div { flex: 1; min-width: 0; }
+.grapes-page-heading .subject-input { width: 100%; font-size: clamp(22px,2.3vw,36px); }
+.grapes-edition-settings { border: 1px solid var(--line); margin: 0 0 20px; padding: 14px 18px; background: var(--surface); font-size: 12px; }
+.grapes-edition-settings summary { cursor: pointer; }
+.grapes-edition-fields { display: grid; grid-template-columns: 1fr 220px; gap: 20px; margin: 18px 0; }
+.grapes-recovery-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.grapes-workbench { display: grid; grid-template-columns: 190px minmax(380px,1fr) 245px; border: 1px solid var(--line-strong); background: var(--surface); min-height: 740px; height: calc(100vh - 200px); max-height: 1100px; --gjs-primary-color: var(--surface); --gjs-secondary-color: var(--ink-2); --gjs-tertiary-color: var(--red); --gjs-quaternary-color: var(--red); --gjs-main-color: var(--surface); --gjs-font-color: var(--ink); --gjs-font-color-active: var(--red); }
+.grapes-library,.grapes-properties { padding: 20px 14px; overflow: auto; color: var(--ink); }
+.grapes-library { border-right: 1px solid var(--line); }
+.grapes-properties { border-left: 1px solid var(--line); }
+.grapes-workbench h2 { margin: 8px 0; font-family: Georgia,serif; font-size: 23px; font-weight: 400; }
+.grapes-workbench h3 { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; margin: 24px 0 10px; color: var(--ink-3); }
+.grapes-help { font-size: 11px; line-height: 1.6; color: var(--ink-3); }
+.grapes-block-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.grapes-block-grid button { min-height: 76px; padding: 10px 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface); color: var(--ink-2); cursor: grab; font-size: 10px; transition: background .15s,border-color .15s; }
+.grapes-block-grid button span { font-size: 23px; font-family: Georgia,serif; }
+.grapes-block-grid button:hover,.grapes-block-grid button:focus-visible { border-color: var(--red); background: var(--red-soft); color: var(--red); }
+.grapes-center { display: flex; flex-direction: column; min-width: 0; background: var(--surface-2); overflow: hidden; }
+.grapes-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 8px; min-height: 50px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.grapes-toolbar > div { display: flex; gap: 4px; }
+.grapes-toolbar button { cursor: pointer; color: var(--ink-2); padding: 8px; font-size: 11px; border: 0; background: transparent; }
+.grapes-toolbar button[aria-pressed=true] { background: var(--red-soft); color: var(--red); }
+.grapes-canvas { flex: 1; min-height: 0; }
+.grapes-canvas .gjs-cv-canvas { width: 100%; height: 100%; top: 0; background: #ece9e4; }
+.grapes-canvas .gjs-frame { border: 0; }
+.grapes-block-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 18px 0; }
+.grapes-properties .field { margin: 15px 0; }
+.grapes-properties input,.grapes-library input { width: 100%; border: 1px solid var(--line-strong); border-radius: 3px; padding: 8px; background: var(--surface); color: var(--ink); font-size: 12px; }
+.grapes-styles .gjs-sm-sector { background: var(--surface); border-color: var(--line); }
+.grapes-styles .gjs-sm-sector-title { font-size: 12px; background: var(--surface-2); }
+.grapes-styles .gjs-field,.grapes-traits .gjs-field { background: var(--surface-2); color: var(--ink); border: 1px solid var(--line-strong); box-shadow: none; }
+.grapes-styles .gjs-field input { color: var(--ink); }
+.grapes-styles .gjs-sm-property { font-size: 11px; }
+.grapes-traits { display: none; } /* URL/image traits have labeled controls above. */
+.grapes-upload { display: block; padding: 12px; border: 1px dashed var(--line-strong); font-size: 12px; }
+.grapes-upload input { margin-top: 10px; }
+.saved-editor-block { display: block; width: 100%; padding: 10px; margin: 7px 0; border: 1px solid var(--line); background: var(--surface-2); text-align: left; cursor: pointer; }
+.grapes-preview { padding: 24px; background: var(--surface-2); border: 1px solid var(--line); }
+.grapes-preview-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 24px; }
+.grapes-preview iframe { display: block; max-width: 100%; height: 850px; border: 0; margin: 0 auto; background: #fff; }
+.grapes-preview > p { color: var(--ink-3); font-size: 12px; }
+@media(min-width: 1100px) { .app-main:has(.grapes-page) { padding-inline: 24px; } }
+.main-content:has(.grapes-page) { max-width: none; padding: 32px 24px; }
+@media(max-width:1250px) {
+ .grapes-workbench { grid-template-columns: 140px minmax(290px,1fr) 190px; }
+ .grapes-library,.grapes-properties { padding: 16px 10px; }
+ .grapes-block-grid button { font-size: 9px; }
+ .main-content:has(.grapes-page) { padding: 24px 12px; }
+}

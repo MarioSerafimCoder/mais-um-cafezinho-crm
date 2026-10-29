@@ -5,8 +5,8 @@ import { buildEditorialEmail } from './email-layout'
 import { draftPayload, isSafeEmailBody, safePage } from '../../functions/_utils'
 
 describe('newsletter templates', () => {
-  it('provides three distinct, link-safe editorial starting points and recommends Classic per email', () => {
-    expect(templates.map((template) => template.id)).toEqual(['blog', 'curadoria', 'especial'])
+  it('provides six distinct, link-safe editorial starting points and recommends Classic per email', () => {
+    expect(templates.map((template) => template.id)).toEqual(['blog', 'curadoria', 'especial', 'carta', 'bastidores', 'convite'])
     for (const template of templates) {
       expect(template.preheader).toBeTruthy()
       expect(template.buttondownTemplate).toBe('classic')

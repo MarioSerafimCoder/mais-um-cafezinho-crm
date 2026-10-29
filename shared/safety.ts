@@ -60,3 +60,5 @@ export function isEditorDocument(value: unknown): value is DocumentNode {
   }
   return visit(value, 0) && (value as DocumentNode).type === 'doc'
 }
+// Shared entry point for consumers validating the native editor schema.
+export { isGrapesDocument } from './grapes-document'

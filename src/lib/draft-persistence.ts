@@ -25,10 +25,10 @@ export class DraftPersistence {
     this.cloudMetadata = this.metadata()
   }
 
-  private metadata() { const d = this.session.value; return JSON.stringify([d.buttondownId, d.syncedRevision, d.pendingCreate]) }
+  private metadata() { const d = this.session.value; return JSON.stringify([d.buttondownId, d.syncedRevision, d.pendingCreate, d.schemaVersion]) }
   get pending() {
     const d = this.session.value
-    return !this.status || (this.status.cloud && (d.cloudSavedRevision !== (d.revision || 0) || this.cloudMetadata !== this.metadata())) || Boolean(d.buttondownId && (!this.status.connected || d.syncedRevision !== (d.revision || 0))) || Boolean(d.pendingCreate)
+    return !this.status || (this.status.cloud && (d.cloudSavedRevision !== (d.revision || 0) || this.cloudMetadata !== this.metadata())) || Boolean(d.migration?.sourceRevision !== (d.revision || 0) && d.buttondownId && (!this.status.connected || d.syncedRevision !== (d.revision || 0))) || Boolean(d.pendingCreate)
   }
   get label() {
     if (this.session.state === 'erro') return 'Não foi possível salvar — intervenção necessária.'
@@ -87,7 +87,8 @@ export class DraftPersistence {
         if (this.stopped) return
         const d = this.session.value
         if (prepare && !this.status?.connected) throw new Error('Não foi possível preparar: a conexão com a Buttondown não está confirmada.')
-        if (this.status?.connected && ((!d.buttondownId && Boolean(d.document) && Boolean(d.subject.trim())) || (d.buttondownId && d.syncedRevision !== (d.revision || 0)))) {
+        const untouchedMigration = d.schemaVersion === 3 && d.migration?.sourceRevision === (d.revision || 0)
+        if (this.status?.connected && (prepare || !untouchedMigration) && ((!d.buttondownId && Boolean(d.document) && Boolean(d.subject.trim())) || (d.buttondownId && (d.syncedRevision !== (d.revision || 0) || (prepare && untouchedMigration))))) {
           destination = 'buttondown'
           await this.session.sync(this.html, this.services.saveDraft, () => this.cloud())
           destination = 'cloud'
@@ -113,7 +114,7 @@ export class DraftPersistence {
     finally { this.running = undefined }
     const d = this.session.value
     const cloudPending = this.status?.cloud && (d.cloudSavedRevision !== (d.revision || 0) || this.cloudMetadata !== this.metadata())
-    const externalPending = this.status?.connected && d.buttondownId && d.syncedRevision !== (d.revision || 0)
+    const externalPending = d.migration?.sourceRevision !== (d.revision || 0) && this.status?.connected && d.buttondownId && d.syncedRevision !== (d.revision || 0)
     if (!this.stopped && !this.error && (cloudPending || externalPending)) this.schedule()
   }
 }

@@ -29,6 +29,7 @@ export const api = {
   deleteCampaign: (draftId?: string, campaignId?: string) => request<{ deleted: boolean; campaignId: string | null }>('/api/remove-campaign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ draftId, campaignId }) }),
   dashboard: () => request<DashboardSummary>('/api/dashboard'),
   cloudDrafts: (cursor?: string) => request<{ results: import('./campaigns').DraftSummary[]; next: string | null }>(`/api/drafts${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
+  originalDraft: (id: string) => request<DraftRecord>(`/api/drafts/${encodeURIComponent(id)}?original=1`),
   cloudDraft: (id: string) => request<DraftRecord>(`/api/drafts/${encodeURIComponent(id)}`),
   saveCloudDraft: (draft: DraftRecord) => request<DraftRecord>(`/api/drafts/${encodeURIComponent(draft.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draft) }),
   cloudSettings: () => request<NewsletterSettings & { cloudRevision: number }>('/api/settings'),

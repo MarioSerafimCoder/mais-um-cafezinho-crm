@@ -10,5 +10,5 @@ export default defineConfig(({ mode }) => ({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
   },
-  server: mode === 'local' ? { proxy: { '/api': 'http://127.0.0.1:8788' } } : undefined,
+  server: mode === 'development' ? { proxy: { '/api': 'http://127.0.0.1:8788' } } : undefined,
 }))

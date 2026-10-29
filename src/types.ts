@@ -11,8 +11,9 @@ export type DraftRecord = {
   buttondownId?: string
   status: 'draft'
   updatedAt: string
-  schemaVersion?: 2
-  document?: import('../shared/safety').DocumentNode
+  schemaVersion?: 2 | 3
+  migration?: { version: 1; sourceSchema: number; sourceRevision: number }
+  document?: import('../shared/safety').DocumentNode | (import('../shared/grapes-document').GrapesDocument & { content?: never })
   revision?: number
   cloudRevision?: number
   lastCloudSavedAt?: string

@@ -1,6 +1,7 @@
 import type { DraftRecord } from '../types'
 import type { DocumentNode } from '../../shared/safety'
 import { isEditorDocument } from '../../shared/safety'
+import { isGrapesDocument } from '../../shared/grapes-document'
 import { validateDraftPayload } from './email'
 import { readDrafts, writeDraft } from './storage'
 
@@ -33,9 +34,9 @@ export class DraftSession {
   clearError() { this.error = ''; this.emit() }
 
   edit(patch: Partial<Pick<DraftRecord, 'subject' | 'description' | 'buttondownTemplate' | 'editionDate' | 'templateId' | 'document'>>) {
-    if (patch.document && !isEditorDocument(patch.document)) throw new Error('O documento contém uma estrutura ou atributo não permitido.')
+    if (patch.document && !isEditorDocument(patch.document) && !isGrapesDocument(patch.document)) throw new Error('O documento contém uma estrutura ou atributo não permitido.')
     if (Object.entries(patch).every(([key, value]) => JSON.stringify(this.value[key as keyof DraftRecord]) === JSON.stringify(value))) return
-    this.value = { ...this.value, ...structuredClone(patch), schemaVersion: 2, revision: (this.value.revision || 0) + 1, updatedAt: new Date().toISOString() }
+    this.value = { ...this.value, ...structuredClone(patch), schemaVersion: isGrapesDocument(patch.document || this.value.document) ? 3 : 2, revision: (this.value.revision || 0) + 1, updatedAt: new Date().toISOString() }
     this.state = 'alterado'; this.error = ''; this.emit()
   }
 

@@ -50,6 +50,16 @@ export function removeDraft(id: string) {
   localStorage.setItem(draftsKey, JSON.stringify(readDrafts().filter((draft) => draft.id !== id)))
 }
 
+export function preserveOriginal(draft: DraftRecord) {
+  const key = `${draftsKey}:original:${draft.id}`
+  if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(draft))
+  if (!localStorage.getItem(key)) throw new Error('Não foi possível proteger a cópia original. A migração não foi salva.')
+}
+export function readOriginal(id: string): DraftRecord | null {
+  const text = localStorage.getItem(`${draftsKey}:original:${id}`)
+  return text ? JSON.parse(text) : null
+}
+
 export function readSettings(): NewsletterSettings {
   try {
     const saved = JSON.parse(localStorage.getItem(settingsKey) || '{}') as Record<string, unknown>
