@@ -2,13 +2,24 @@ import { database, getDocument } from '../_documents'
 import { buttondown, errorResponse, json, matchesButtondownTemplate, parseJson, validId, type AppEnv } from '../_utils'
 
 function recipients(env: AppEnv) {
-  return (env.EDITORIAL_TEST_RECIPIENTS || '').split(',').map(s => s.trim()).filter(s => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))
+  return (env.EDITORIAL_TEST_RECIPIENTS || '').split(',').map(s => s.trim().toLowerCase()).filter(s => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))
 }
 function enabled(env: AppEnv) {
   // A configured allowlist keeps the original safe default. When the owner
   // explicitly enables tests, the editor may collect up to 30 addresses in
   // its modal and this endpoint validates each one before sending.
   return env.EDITORIAL_TEST_ENABLED !== 'false' && Boolean(env.BUTTONDOWN_API_KEY?.trim()) && (recipients(env).length > 0 || env.EDITORIAL_TEST_ENABLED === 'true')
+}
+type RecipientAuthorization = { ok: true; recipient: string } | { ok: false; status: 400 | 403; error: string }
+function authorizeRecipient(env: AppEnv, value: unknown): RecipientAuthorization {
+  if (typeof value !== 'string') return { ok: false, status: 400, error: 'Informe um e-mail válido.' }
+  const recipient = value.trim().toLowerCase()
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) return { ok: false, status: 400, error: 'Informe um e-mail válido.' }
+  if (env.EDITORIAL_TEST_ENABLED === 'false') return { ok: false, status: 403, error: 'Teste desativado no servidor.' }
+  const allowlist = recipients(env)
+  if (allowlist.length > 0 && !allowlist.includes(recipient)) return { ok: false, status: 403, error: 'Este endereço não está autorizado para testes.' }
+  if (allowlist.length === 0 && env.EDITORIAL_TEST_ENABLED !== 'true') return { ok: false, status: 403, error: 'Configure a autorização de testes antes de informar um destinatário.' }
+  return { ok: true, recipient }
 }
 export async function onRequestGet({ request, env }: { request: Request; env: AppEnv }) {
   try {
@@ -45,13 +56,20 @@ export async function onRequestPost({ request, env }: { request: Request; env: A
     if (!matchesButtondownTemplate(campaign.template, draft.buttondownTemplate)) return json({ error: 'O template da campanha na Buttondown diverge da revisão do CRM. Salve e sincronize novamente.' }, 409)
     if (draft.syncedBodyHash !== await bodyHash(campaign.body)) return json({ error: 'O conteúdo na Buttondown diverge da revisão salva no CRM. Salve e sincronize novamente.' }, 409)
     if (!input.attemptId) {
-      const requested = typeof input.recipient === 'string' ? input.recipient.trim().toLowerCase() : ''
-      if (requested && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(requested)) return json({ error: 'Informe um e-mail válido.' }, 400)
-      if (requested && recipients(env).length > 0 && !recipients(env).includes(requested)) return json({ error: 'Este endereço não está autorizado para testes.' }, 403)
-      if (requested && !recipients(env).length && env.EDITORIAL_TEST_ENABLED !== 'true') return json({ error: 'Configure a autorização de testes antes de informar um destinatário.' }, 403)
-      if (!requested && !Number.isInteger(input.recipientIndex)) return json({ error: 'Selecione um destino autorizado.' }, 400)
-      const recipient = requested || recipients(env)[Number(input.recipientIndex)]
-      if (!recipient) return json({ error: 'Destino não autorizado.' }, 403)
+      if (input.recipient !== undefined) {
+        const authorization = authorizeRecipient(env, input.recipient)
+        if (!authorization.ok) return json({ error: authorization.error }, authorization.status)
+        input.recipient = authorization.recipient
+      }
+      const selected = input.recipient !== undefined
+        ? authorizeRecipient(env, input.recipient)
+        : Number.isInteger(input.recipientIndex)
+          ? recipients(env)[Number(input.recipientIndex)]
+            ? authorizeRecipient(env, recipients(env)[Number(input.recipientIndex)])
+            : { ok: false as const, status: 403 as const, error: 'Destino não autorizado.' }
+          : { ok: false as const, status: 400 as const, error: 'Selecione um destino autorizado.' }
+      if (!selected.ok) return json({ error: selected.error }, selected.status)
+      const recipient = selected.recipient
       await db.prepare("UPDATE editorial_tests SET state = 'expired' WHERE campaign_id = ? AND recipient = ? AND state = 'prepared' AND created_at < ?").bind(draft.buttondownId, recipient, new Date(Date.now() - 600000).toISOString()).run()
       const id = crypto.randomUUID()
       const result = await db.prepare("INSERT INTO editorial_tests (id, draft_id, cloud_revision, recipient, campaign_id, body, subject, created_at) SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM editorial_tests WHERE campaign_id = ? AND recipient = ? AND state IN ('prepared', 'attempted'))").bind(id, draft.id, draft.cloudRevision, recipient, draft.buttondownId, campaign.body, campaign.subject, new Date().toISOString(), draft.buttondownId, recipient).run()
@@ -60,7 +78,10 @@ export async function onRequestPost({ request, env }: { request: Request; env: A
     }
     if (input.confirm !== true || typeof input.attemptId !== 'string' || !validId(input.attemptId)) return json({ error: 'Confirmação explícita obrigatória.' }, 400)
     const attempt = await db.prepare('SELECT * FROM editorial_tests WHERE id = ?').bind(input.attemptId).first<{ draft_id: string; cloud_revision: number; recipient: string; campaign_id: string; body: string; subject: string; created_at: string }>()
-    if (!attempt || attempt.draft_id !== draft.id || attempt.cloud_revision !== draft.cloudRevision || attempt.campaign_id !== draft.buttondownId || attempt.body !== campaign.body || attempt.subject !== campaign.subject || !recipients(env).includes(attempt.recipient) || Date.now() - Date.parse(attempt.created_at) > 600000) return json({ error: 'Preparação expirada ou conteúdo alterado.' }, 409)
+    const attemptRecipient = typeof attempt?.recipient === 'string' ? attempt.recipient.trim().toLowerCase() : ''
+    const attemptAuthorization = attempt ? authorizeRecipient(env, attempt.recipient) : null
+    const confirmationRecipient = input.recipient === undefined ? null : authorizeRecipient(env, input.recipient)
+    if (!attempt || attempt.draft_id !== draft.id || attempt.cloud_revision !== draft.cloudRevision || attempt.campaign_id !== draft.buttondownId || attempt.body !== campaign.body || attempt.subject !== campaign.subject || !attemptAuthorization?.ok || attemptAuthorization.recipient !== attemptRecipient || (input.recipient !== undefined && (!confirmationRecipient?.ok || confirmationRecipient.recipient !== attemptRecipient)) || Date.now() - Date.parse(attempt.created_at) > 600000) return json({ error: 'Preparação expirada ou conteúdo alterado.' }, 409)
     const claim = await db.prepare("UPDATE editorial_tests SET state = 'attempted' WHERE id = ? AND state = 'prepared' AND EXISTS (SELECT 1 FROM editorial_documents WHERE kind = 'draft' AND id = ? AND version = ?)").bind(input.attemptId, draft.id, draft.cloudRevision).run()
     if (!claim.meta.changes) return json({ error: 'Tentativa já utilizada ou revisão alterada.' }, 409)
     // Claim survives timeouts: an uncertain outcome is never retried automatically.

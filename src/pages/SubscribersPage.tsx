@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Search, ChevronLeft, ChevronRight, ShieldCheck, UserRound, UserPlus, Mail, CircleCheck, Trash2 } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, ShieldCheck, UserRound, UserPlus, Mail, CircleCheck, Trash2, X } from 'lucide-react'
 import { api, requireConnection } from '../lib/api'
 import { demoSubscribers } from '../data/templates'
 import type { ApiPage, IntegrationStatus, Subscriber } from '../types'
@@ -38,6 +38,9 @@ export function SubscribersPage() {
   const [processingEmail, setProcessingEmail] = useState('')
   const [createError, setCreateError] = useState('')
   const [createMessage, setCreateMessage] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<Subscriber | null>(null)
+  const [deleteConfirmation, setDeleteConfirmation] = useState('')
+  const [deleteError, setDeleteError] = useState('')
 
   useEffect(() => {
     const handle = window.setTimeout(() => { setQuery(search.trim()); setPage(1) }, 250)
@@ -72,14 +75,26 @@ export function SubscribersPage() {
     return () => { window.removeEventListener('focus', refresh); window.clearInterval(timer) }
   }, [])
 
-  const deleteContact = async (subscriber: Subscriber) => {
+  const openDeleteDialog = (subscriber: Subscriber) => {
     if (processingEmail) return
-    setProcessingEmail(subscriber.email_address); setCreateError(''); setCreateMessage('')
+    setDeleteTarget(subscriber); setDeleteConfirmation(''); setDeleteError('')
+  }
+
+  const closeDeleteDialog = () => {
+    if (processingEmail) return
+    setDeleteTarget(null); setDeleteConfirmation(''); setDeleteError('')
+  }
+
+  const deleteContact = async () => {
+    if (!deleteTarget || processingEmail || deleteConfirmation.trim().toLowerCase() !== deleteTarget.email_address.toLowerCase()) return
+    const target = deleteTarget
+    setProcessingEmail(target.email_address); setDeleteError(''); setCreateError(''); setCreateMessage('')
     try {
-      await api.deleteSubscriber(subscriber.id)
-      setCreateMessage(`Contato excluído da base: ${subscriber.email_address}.`)
+      await api.deleteSubscriber(target.id, deleteConfirmation.trim())
+      setCreateMessage(`Contato excluído da base: ${target.email_address}.`)
+      setDeleteTarget(null); setDeleteConfirmation('')
       setPage(1); setReload(value => value + 1)
-    } catch (cause) { setCreateError(cause instanceof Error ? cause.message : 'Não foi possível excluir o contato.') }
+    } catch (cause) { setDeleteError(cause instanceof Error ? cause.message : 'Não foi possível excluir o contato.') }
     finally { setProcessingEmail('') }
   }
 
@@ -140,12 +155,30 @@ export function SubscribersPage() {
           <td><div className="subscriber-cell"><span className="subscriber-avatar"><UserRound size={15} /></span><div><strong>{name || subscriber.email_address}</strong>{name && <small>{subscriber.email_address}</small>}</div></div></td>
           <td><div className="subscriber-status-cell"><StatusPill tone={statusTone(subscriber.type)}>{displayStatus(subscriber.type)}</StatusPill>{subscriber.type === 'unactivated' && <Button className="subscriber-activate-button" size="sm" variant="outline" disabled={Boolean(processingEmail)} onClick={() => void addSubscriber(subscriber.email_address)}>{processingEmail === subscriber.email_address ? 'Ativando…' : 'Ativar'}</Button>}</div></td>
           <td>{subscriber.source ? subscriber.source.replaceAll('_', ' ') : '—'}</td>
-          <td>{subscriber.creation_date ? subscriberDateLabel(subscriber.creation_date) : '—'}</td><td>{status?.configured && <Button variant="quiet" size="sm" icon={<Trash2 size={14} />} disabled={Boolean(processingEmail)} onClick={() => void deleteContact(subscriber)} aria-label={`Excluir ${subscriber.email_address}`}>Excluir contato</Button>}</td>
+          <td>{subscriber.creation_date ? subscriberDateLabel(subscriber.creation_date) : '—'}</td><td>{status?.configured && <Button variant="quiet" size="sm" icon={<Trash2 size={14} />} disabled={Boolean(processingEmail)} onClick={() => openDeleteDialog(subscriber)} aria-label={`Excluir ${subscriber.email_address}`}>Excluir contato</Button>}</td>
         </tr>})}
       </tbody></table></div>
       {activeRows.length === 0 && <div className="table-empty">{query ? `Nenhum assinante encontrado para “${query}”.` : 'Nenhum assinante nesta página.'}</div>}
       <div className="table-pagination"><span>{activeRows.length} registros nesta página · {pageData?.count?.toLocaleString('pt-BR') ?? '—'} no total</span><div><button className="icon-button" aria-label="Página anterior" disabled={page <= 1 || loading} onClick={() => setPage((value) => Math.max(1, value - 1))}><ChevronLeft size={17} /></button><span className="page-indicator">Página {page}</span><button className="icon-button" aria-label="Próxima página" disabled={!pageData?.next || loading} onClick={() => setPage((value) => value + 1)}><ChevronRight size={17} /></button></div></div>
       <p className="privacy-note"><ShieldCheck size={14} /> Descadastrados, bloqueados, reclamações e endereços não entregáveis não são reativados pelo formulário.</p>
     </>}
+    {deleteTarget && <DeleteSubscriberDialog subscriber={deleteTarget} value={deleteConfirmation} error={deleteError} busy={processingEmail === deleteTarget.email_address} onChange={setDeleteConfirmation} onClose={closeDeleteDialog} onConfirm={() => void deleteContact()} />}
   </>
+}
+
+function DeleteSubscriberDialog({ subscriber, value, error, busy, onChange, onClose, onConfirm }: { subscriber: Subscriber; value: string; error: string; busy: boolean; onChange: (value: string) => void; onClose: () => void; onConfirm: () => void }) {
+  const matches = value.trim().toLowerCase() === subscriber.email_address.toLowerCase()
+  return <div className="subscriber-delete-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !busy) onClose() }}>
+    <section className="subscriber-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="subscriber-delete-title">
+      <button type="button" className="subscriber-delete-close" aria-label="Fechar" onClick={onClose} disabled={busy}><X size={19} /></button>
+      <p className="eyebrow">EXCLUSÃO DE ASSINANTE</p>
+      <h2 id="subscriber-delete-title">Excluir contato definitivamente?</h2>
+      <p>Esta ação não pode ser desfeita e removerá o assinante da base do Buttondown.</p>
+      <p className="subscriber-delete-address">{subscriber.email_address}</p>
+      <label className="field"><span className="field-label">Digite o e-mail para confirmar</span><input type="email" autoFocus value={value} onChange={event => onChange(event.target.value)} placeholder={subscriber.email_address} disabled={busy} aria-describedby="subscriber-delete-help" /></label>
+      <p id="subscriber-delete-help" className="field-hint">Digite exatamente o endereço acima para habilitar a exclusão.</p>
+      {error && <p className="subscriber-delete-error" role="alert">{error}</p>}
+      <div className="subscriber-delete-actions"><Button variant="outline" onClick={onClose} disabled={busy}>Cancelar</Button><Button variant="danger" onClick={onConfirm} disabled={!matches || busy}>{busy ? 'Excluindo…' : 'Excluir definitivamente'}</Button></div>
+    </section>
+  </div>
 }

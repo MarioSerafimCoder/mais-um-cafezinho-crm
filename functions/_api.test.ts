@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { onRequestGet as status } from './api/status'
-import { onRequestGet as dashboard } from './api/dashboard'
+import { clearDashboardCache, onRequestGet as dashboard } from './api/dashboard'
 import { onRequestPost as create } from './api/emails/index'
 import { onRequestPatch as patch } from './api/emails/[id]'
 import { onRequestPost as upload } from './api/images'
@@ -10,7 +10,7 @@ import { matchesButtondownTemplate } from './_utils'
 
 const env = { BUTTONDOWN_API_KEY: 'test-only-key' }
 const request = new Request('https://crm.marioserafim.com.br/api/status')
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => { vi.unstubAllGlobals(); clearDashboardCache(); vi.useRealTimers() })
 const mock = (data: unknown, code = 200) => vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => Response.json(data, { status: code })))
 
 describe('Buttondown com mocks, sem chamadas externas', () => {
@@ -60,9 +60,63 @@ describe('Buttondown com mocks, sem chamadas externas', () => {
     const result = await (await dashboard({ request, env })).json() as { recent: Array<{ analytics?: { opens?: number } }> }
     expect(result.recent[0]?.analytics?.opens).toBe(7)
 
+    clearDashboardCache()
     network.mockImplementation(async (url: string | URL | Request) => String(url).includes('/analytics') ? Response.json({ detail: 'analytics add-on unavailable' }, { status: 403 }) : Response.json({ results: [{ id: 'em_sent', subject: 'Campanha', status: 'sent' }], count: 1 }))
     const unavailable = await (await dashboard({ request, env })).json() as { recent: Array<{ analytics: unknown }> }
     expect(unavailable.recent[0]?.analytics).toBeNull()
+  })
+
+  it('preserva métricas independentes quando uma consulta falha', async () => {
+    const network = vi.fn(async (url: string | URL | Request) => {
+      if (String(url).includes('status=draft')) return new Response('{}', { status: 503 })
+      return Response.json({ results: [], count: 7 })
+    })
+    vi.stubGlobal('fetch', network)
+    const result = await (await dashboard({ request, env })).json() as { subscribers: number | null; drafts: number | null; partial?: boolean; unavailable?: string[] }
+    expect(result.subscribers).toBe(7)
+    expect(result.drafts).toBeNull()
+    expect(result.partial).toBe(true)
+    expect(result.unavailable).toContain('drafts')
+  })
+
+  it('reutiliza apenas o cache privado dentro da janela curta', async () => {
+    const network = vi.fn(async () => Response.json({ results: [], count: 3 }))
+    vi.stubGlobal('fetch', network)
+    await dashboard({ request, env })
+    const cached = await (await dashboard({ request, env })).json() as { cached?: boolean; subscribers: number | null }
+    expect(cached).toMatchObject({ cached: true, subscribers: 3 })
+    expect(network).toHaveBeenCalledTimes(6)
+  })
+
+  it('atualiza depois que o cache expira e não inventa dados indisponíveis', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-29T12:00:00Z'))
+    const network = vi.fn(async () => Response.json({ results: [], count: 4 }))
+    vi.stubGlobal('fetch', network)
+    await dashboard({ request, env })
+    vi.setSystemTime(new Date('2026-10-29T12:01:01Z'))
+    network.mockImplementation(async () => new Response('{}', { status: 503 }))
+    const result = await (await dashboard({ request, env })).json() as { subscribers: number | null; stale?: boolean; unavailable?: string[] }
+    expect(result.subscribers).toBe(4)
+    expect(result.stale).toBe(true)
+    expect(result.unavailable).toBeUndefined()
+  })
+
+  it('mantém o painel respondendo quando todas as consultas não retornam dados', async () => {
+    mock({}, 503)
+    const result = await (await dashboard({ request, env })).json() as { subscribers: number | null; recent: unknown[]; partial?: boolean }
+    expect(result).toMatchObject({ subscribers: null, recent: [], partial: true })
+  })
+
+  it('sinaliza falha parcial de autenticação sem ocultar dados já retornados', async () => {
+    let calls = 0
+    vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request) => {
+      calls += 1
+      if (calls === 1) return new Response('{}', { status: 401 })
+      return Response.json({ results: [], count: 2 })
+    }))
+    const result = await (await dashboard({ request, env })).json() as { integrationError?: string; drafts: number | null }
+    expect(result.drafts).toBe(2)
+    expect(result.integrationError).toContain('autenticação')
   })
 
   it('não transforma resposta inválida em lista vazia', async () => {

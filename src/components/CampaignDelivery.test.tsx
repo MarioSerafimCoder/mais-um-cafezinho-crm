@@ -4,7 +4,7 @@ import type { DraftRecord } from '../types'
 import { CampaignDelivery } from './CampaignDelivery'
 
 const mocks = vi.hoisted(() => ({ status: vi.fn(), delivery: vi.fn() }))
-vi.mock('../lib/api', () => ({ api: { campaignDeliveryStatus: mocks.status, subscribers: vi.fn(), campaignDelivery: mocks.delivery } }))
+vi.mock('../lib/api', () => ({ api: { campaignDeliveryStatus: mocks.status, subscribers: vi.fn(), campaignDelivery: mocks.delivery }, ApiError: class ApiError extends Error { status = 502 } }))
 
 const draft: DraftRecord = {
   id: 'draft-ui-test', subject: 'Newsletter de teste', content: '<p>Conteúdo</p>', templateId: 'blog',
@@ -29,7 +29,7 @@ it('mostra o bloqueio de campanhas com clareza e não expõe controles de audiê
   expect(screen.getByText('Nenhum assinante será contatado.')).toBeInTheDocument()
 })
 
-it('prepara e envia com um único clique, sem confirmação extra', async () => {
+it('separa preparação e confirmação final', async () => {
   mocks.status.mockResolvedValue({ enabled: true, activeCount: 12 })
   mocks.delivery
     .mockResolvedValueOnce({ attemptId: 'attempt-campaign', audienceMode: 'all_active', recipientCount: 12, cloudRevision: 1, subject: draft.subject, expiresAt: new Date(Date.now() + 60_000).toISOString() })
@@ -37,14 +37,19 @@ it('prepara e envia com um único clique, sem confirmação extra', async () => 
   render(<CampaignDelivery draft={draft} />)
 
   screen.getByText('Enviar campanha').closest('summary')?.click()
-  const send = await screen.findByRole('button', { name: 'Enviar agora para 12 contatos' })
+  const send = await screen.findByRole('button', { name: 'Preparar envio' })
   expect(send).toBeEnabled()
   expect(mocks.delivery).not.toHaveBeenCalled()
   expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
   fireEvent.click(send)
+  await waitFor(() => expect(mocks.delivery).toHaveBeenCalledTimes(1))
+  expect(mocks.delivery.mock.calls[0][0]).toMatchObject({ action: 'prepare', audience: { mode: 'all_active' } })
+  expect(mocks.delivery.mock.calls[0][0]).not.toHaveProperty('confirm')
+  expect(await screen.findByRole('button', { name: 'Confirmar e enviar campanha' })).toBeEnabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Confirmar e enviar campanha' }))
   await waitFor(() => expect(mocks.delivery).toHaveBeenCalledTimes(2))
   expect(mocks.delivery.mock.calls[1][0]).toMatchObject({ action: 'confirm', confirm: true, attemptId: 'attempt-campaign' })
-  expect(await screen.findByText(/Buttondown aceitou o envio para 12 contatos/)).toBeInTheDocument()
+  expect(await screen.findByText('Campanha aceita pela Buttondown.')).toBeInTheDocument()
   const result = screen.getByRole('status')
   expect(result).toHaveClass('campaign-feedback-success')
   expect(result).toHaveTextContent('A aceitação não confirma a entrega na caixa postal.')

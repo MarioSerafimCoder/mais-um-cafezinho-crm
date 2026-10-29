@@ -17,6 +17,7 @@ afterEach(() => vi.unstubAllGlobals())
 it('respeita desativação explícita sem chamadas externas', async () => { const run = setup({ EDITORIAL_TEST_ENABLED: 'false' }); expect((await run({})).status).toBe(403); expect(fetch).not.toHaveBeenCalled() })
 it('allowlist e chave configuradas dispensam flag por teste', async () => { const run = setup({ EDITORIAL_TEST_ENABLED: undefined }); expect((await run({ recipientIndex: 0 })).status).toBe(200) })
 it('recusa destinatário arbitrário e revisão antiga', async () => { const run = setup(); expect((await run({ recipients: ['x@example.com'] })).status).toBe(400); expect((await run({ cloudRevision: 3 })).status).toBe(409); expect(fetch).not.toHaveBeenCalled() })
+it('bloqueia endereço digitado fora da allowlist', async () => { const run = setup(); expect((await run({ recipient: 'outside@example.com' })).status).toBe(403); expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/send-draft'))).toHaveLength(0) })
 it('prepara destino exato sem enviar', async () => { const run = setup(); const response = await run({ recipientIndex: 0 }); expect(await response.json()).toMatchObject({ recipient: 'owner@example.com', cloudRevision: 4 }); expect(fetch).toHaveBeenCalledTimes(1); expect(vi.mocked(fetch).mock.calls[0][0]).not.toContain('send-draft') })
 it('exige confirmação e impede repetição; usa somente send-draft', async () => {
   const run = setup()

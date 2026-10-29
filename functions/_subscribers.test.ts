@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { afterEach, expect, it, vi } from 'vitest'
 import { onRequestPost } from './api/subscribers'
+import { onRequestDelete } from './api/subscribers/[id]'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -10,6 +11,11 @@ function post(body: unknown) {
     env,
     request: new Request('https://crm.marioserafim.com.br/api/subscribers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   })
+}
+
+function remove(body: unknown) {
+  const env = { BUTTONDOWN_API_KEY: 'test-only-key' }
+  return onRequestDelete({ env, params: { id: 'sub_delete' }, request: new Request('https://crm.marioserafim.com.br/api/subscribers/sub_delete', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) })
 }
 
 it('valida o endereço antes de consultar ou gravar na Buttondown', async () => {
@@ -59,4 +65,30 @@ it('ativa sem nova confirmação o cadastro pendente já existente', async () =>
   expect(url).toBe('https://api.buttondown.com/v1/subscribers/sub_pending')
   expect(init?.method).toBe('PATCH')
   expect(JSON.parse(String(init?.body))).toEqual({ type: 'regular' })
+})
+
+it('rejeita exclusão direta sem confirmação antes de consultar a Buttondown', async () => {
+  vi.stubGlobal('fetch', vi.fn())
+  const response = await remove({})
+  expect(response.status).toBe(400)
+  expect(fetch).not.toHaveBeenCalled()
+})
+
+it('confere o e-mail retornado antes de excluir e aceita uma confirmação válida uma única vez', async () => {
+  const network = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => init?.method === 'DELETE'
+    ? new Response(null, { status: 204 })
+    : Response.json({ id: 'sub_delete', email_address: 'leitor@example.com', type: 'regular' }))
+  vi.stubGlobal('fetch', network)
+  expect((await remove({ confirmationEmail: 'outro@example.com' })).status).toBe(409)
+  expect(network).toHaveBeenCalledTimes(1)
+  expect((await remove({ confirmationEmail: 'leitor@example.com' })).status).toBe(200)
+  expect(network).toHaveBeenCalledTimes(3)
+  expect(network.mock.calls.filter(([, init]) => init?.method === 'DELETE')).toHaveLength(1)
+})
+
+it('bloqueia e-mail de confirmação inválido sem excluir', async () => {
+  vi.stubGlobal('fetch', vi.fn())
+  const response = await remove({ confirmationEmail: 'leitor' })
+  expect(response.status).toBe(400)
+  expect(fetch).not.toHaveBeenCalled()
 })

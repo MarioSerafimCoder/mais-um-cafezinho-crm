@@ -81,6 +81,7 @@ export type Campaign = {
   demo?: boolean
   origin?: 'local' | 'cloud'
   analytics?: CampaignAnalytics | null
+  analyticsUnavailable?: boolean
 }
 
 export type ApiPage<T> = {
@@ -108,6 +109,13 @@ export type DashboardSummary = {
   recent: Campaign[]
   upcoming: Campaign[]
   demo: boolean
+  partial?: boolean
+  stale?: boolean
+  cached?: boolean
+  cacheAgeSeconds?: number
+  unavailable?: string[]
+  staleFields?: string[]
+  integrationError?: string
 }
 
 export type NewsletterSettings = {

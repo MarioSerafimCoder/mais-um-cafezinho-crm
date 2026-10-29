@@ -42,6 +42,29 @@ it('preserva histórico e permite novo teste explícito da mesma revisão após 
   expect((await history()).map(row => row.state).sort()).toEqual(['accepted', 'prepared'])
   expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/send-draft'))).toHaveLength(1)
 })
+it('prepara e confirma destinatário manual sem allowlist quando a flag está ativa', async () => {
+  const { env, post } = setup()
+  env.EDITORIAL_TEST_RECIPIENTS = ''
+  env.EDITORIAL_TEST_ENABLED = 'true'
+  const prepared = await (await post({ recipient: 'manual@example.com' })).json() as { attemptId: string }
+  expect(prepared.attemptId).toBeTruthy()
+  expect((await post({ recipient: 'manual@example.com', attemptId: prepared.attemptId, confirm: true })).status).toBe(200)
+  expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/send-draft'))).toHaveLength(1)
+})
+it('recusa destinatário alterado entre preparação e confirmação', async () => {
+  const { env, post } = setup()
+  env.EDITORIAL_TEST_RECIPIENTS = ''
+  env.EDITORIAL_TEST_ENABLED = 'true'
+  const prepared = await (await post({ recipient: 'manual@example.com' })).json() as { attemptId: string }
+  expect((await post({ recipient: 'outro@example.com', attemptId: prepared.attemptId, confirm: true })).status).toBe(409)
+  expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/send-draft'))).toHaveLength(0)
+})
+it('bloqueia a confirmação de uma tentativa expirada', async () => {
+  const { db, post, prepare } = setup(); const prepared = await prepare()
+  db.prepare('UPDATE editorial_tests SET created_at = ? WHERE id = ?').run(new Date(Date.now() - 600001).toISOString(), prepared.attemptId)
+  expect((await post({ attemptId: prepared.attemptId, confirm: true })).status).toBe(409)
+  expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/send-draft'))).toHaveLength(0)
+})
 it.each([403, 422, 429])('registra recusa HTTP %s e permite nova preparação', async status => {
   const { post, prepare, history } = setup(); const first = await prepare()
   vi.mocked(fetch).mockImplementation(async url => String(url).endsWith('/send-draft') ? new Response('{}', { status }) : Response.json({ status: 'draft', body: '<p>Teste</p>', subject: 'Uma newsletter nova', template: 'classic' }))
