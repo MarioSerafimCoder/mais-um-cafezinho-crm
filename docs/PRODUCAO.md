@@ -1,5 +1,7 @@
 # Publicação privada do CRM
 
+Atualização em 30/10/2026: o proprietário autorizou ativar o envio de campanhas. A flag de produção `CAMPAIGN_SENDING_ENABLED=true` está versionada no `wrangler.toml`; ambientes locais e de teste continuam fechados por padrão. Enviar exige a confirmação na etapa 4. As orientações históricas abaixo sobre envio desativado descrevem a implantação inicial.
+
 Destino exclusivo: https://crm.marioserafim.com.br.
 Projeto Pages: `mais-um-cafezinho-crm`, conta `7bfc908c25ef636aade196a09572a11c`.
 Repositório: `MarioSerafimCoder/mais-um-cafezinho-crm`, produção em `main`.

@@ -4,7 +4,7 @@
 
 O editor permite escolher contatos ativos específicos ou todos os assinantes ativos. Na etapa 3 (Preparação), o botão “Preparar envio e ver resumo” sincroniza a edição e valida a audiência no servidor. Se houver bloqueio ou falha, a edição permanece nessa etapa com o motivo. A etapa 4 (Resumo e envio) abre apenas após a preparação e mostra o assunto, a contagem e os endereços selecionados. O envio real exige o clique separado em “Confirmar e enviar campanha”. Alterações na edição ou expiração exigem voltar à etapa 3 para preparar novamente.
 
-O recurso está fechado por padrão no servidor (`CAMPAIGN_SENDING_ENABLED` ausente ou diferente de `true`). Esta alteração de código não aplicou migração, não alterou secrets ou permissões da Buttondown, não publicou o CRM e não enviou e-mails. A configuração de produção continua conforme o guia operacional, com permissão de envio desativada.
+Em 30/10/2026, o proprietário autorizou habilitar o fluxo de envio de produção. `env.production.vars.CAMPAIGN_SENDING_ENABLED=true` fica versionado no `wrangler.toml`, para persistir nos próximos deploys. Os ambientes sem essa flag continuam bloqueados. A ativação não envia campanhas: o disparo exige a confirmação explícita da etapa 4. As migrações remotas foram conferidas e não há pendências. A conta Buttondown possui uma Primary Key, que tem permissões completas conforme a documentação do provedor.
 
 ## Regras do fluxo
 
@@ -15,7 +15,7 @@ O recurso está fechado por padrão no servidor (`CAMPAIGN_SENDING_ENABLED` ause
 - Uma tentativa fica registrada no D1 antes da chamada externa. Cada campanha remota admite uma única preparação/envio ativo ou aceito, mesmo se o rascunho for revisado depois. Resultado incerto permanece bloqueado; não há retry automático. Preparações podem ser canceladas ou expiram após dez minutos. Respostas HTTP 4xx conclusivas, exceto conflito 409, são registradas como rejeitadas e não são tratadas como aceitação.
 - “Aceito pela Buttondown” não significa entregue nem recebido. O CRM apresenta apenas a aceitação da solicitação; confirmação de recebimento exige observar a mensagem na caixa postal.
 
-## Pré-requisitos para ativação futura
+## Pré-requisitos operacionais
 
 1. Revisar e integrar a implementação.
 2. Aplicar a migração `0003_campaign_send_attempts.sql` ao D1 editorial correto.
