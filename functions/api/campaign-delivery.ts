@@ -1,3 +1,4 @@
+import { selectedAudienceFilters } from '../_campaign-audience'
 import { database, getDocument } from '../_documents'
 import { buttondown, errorResponse, json, matchesButtondownTemplate, parseJson, validId, type AppEnv } from '../_utils'
 
@@ -107,6 +108,7 @@ export async function onRequestPost(context: Context) {
       const audience = parseAudience(input.audience)
       if (!audience) return json({ error: 'Escolha todos os assinantes ativos ou selecione contatos ativos.' }, 400)
       const { draft, campaign } = await currentDraft(context, input.draftId, Number(input.cloudRevision))
+      if (hasFilters(campaign.filters) || ![undefined, 'public', 'private'].includes(campaign.email_type)) return json({ error: 'A campanha possui filtros de audiência externos. Revise-os na Buttondown antes de preparar o envio pelo CRM.' }, 409)
       let subscriberIds: string | null = null
       let selectedRecipients: SelectedRecipient[] | undefined
       let recipientCount = 0
@@ -169,16 +171,15 @@ export async function onRequestPost(context: Context) {
         }
       })()
       const { draft, subscribers } = preflight
+      const publication = attempt.audience_mode === 'selected' ? { filters: selectedAudienceFilters(subscribers) } : {}
 
       const claimed = await db.prepare("UPDATE campaign_send_attempts SET state = 'attempted' WHERE id = ? AND state = 'prepared' AND EXISTS (SELECT 1 FROM editorial_documents WHERE kind = 'draft' AND id = ? AND version = ?)")
         .bind(attempt.id, draft.id, draft.cloudRevision).run()
       if (!claimed.meta.changes) return json({ error: 'Preparação já utilizada ou revisão alterada.' }, 409)
       try {
-        if (attempt.audience_mode === 'all_active') {
-          await buttondown(context, `/emails/${encodeURIComponent(attempt.campaign_id)}/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
-        } else {
-          await buttondown(context, `/emails/${encodeURIComponent(attempt.campaign_id)}/send-draft`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscribers: subscribers.map((subscriber) => subscriber.id) }) })
-        }
+        // Apply the exact audience atomically with publication. Never send a
+        // preview as a campaign or fall back to an unfiltered publication.
+        await buttondown(context, `/emails/${encodeURIComponent(attempt.campaign_id)}/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(publication) })
         await db.prepare("UPDATE campaign_send_attempts SET state = 'accepted' WHERE id = ? AND state = 'attempted'").bind(attempt.id).run()
         return json({ accepted: true, audienceMode: attempt.audience_mode, recipientCount: attempt.audience_count })
       } catch (error) {

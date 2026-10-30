@@ -11,7 +11,7 @@ Em 30/10/2026, o proprietário autorizou habilitar o fluxo de envio de produçã
 - “Todos” considera assinantes `regular` e `premium`. A campanha precisa estar em draft e sem filtros de audiência; o servidor consulta a contagem antes de preparar e novamente antes de confirmar.
 - A seleção individual inclui apenas assinantes `regular` ou `premium`, permite até 500 contatos e valida IDs, status e endereços no servidor. O e-mail confirmado é o mesmo endereço validado antes do envio.
 - O servidor exige a revisão atual salva no D1 e sincronizada, consulta a campanha remota e compara assunto, hash do corpo enviado, template, descrição e audiência antes de aceitar a confirmação. Rascunhos antigos sem hash registrado precisam ser sincronizados novamente antes do primeiro envio.
-- A confirmação para contatos selecionados usa `POST /emails/{id}/send-draft` com IDs Buttondown. “Todos” usa `POST /emails/{id}/publish`, que publica e envia imediatamente a campanha conforme a audiência sem filtros da Buttondown.
+- Ambas as audiências usam `POST /emails/{id}/publish`. Para contatos selecionados, o mesmo pedido de publicação aplica filtros: OR dos endereços exatos revalidados e AND com tipos ativos (`regular` ou `premium`). Os filtros são construídos no servidor a partir dos IDs confirmados, nunca recebidos do navegador. Não existe fallback para publicação sem filtro. `/send-draft` pertence exclusivamente ao envio de testes, com o prefixo de prévia do provedor.
 - Uma tentativa fica registrada no D1 antes da chamada externa. Cada campanha remota admite uma única preparação/envio ativo ou aceito, mesmo se o rascunho for revisado depois. Resultado incerto permanece bloqueado; não há retry automático. Preparações podem ser canceladas ou expiram após dez minutos. Respostas HTTP 4xx conclusivas, exceto conflito 409, são registradas como rejeitadas e não são tratadas como aceitação.
 - “Aceito pela Buttondown” não significa entregue nem recebido. O CRM apresenta apenas a aceitação da solicitação; confirmação de recebimento exige observar a mensagem na caixa postal.
 
@@ -30,3 +30,11 @@ A Buttondown documenta `send-draft` com arrays de IDs de assinantes ou endereço
 ## Proteção da sincronização
 
 Novas sincronizações guardam no documento um hash do corpo, assunto, descrição e template retornados pela Buttondown. Atualizações posteriores conferem essa referência antes de gravar; uma resposta perdida pode ser reconciliada quando todos os campos já correspondem ao pedido. Rascunhos antigos sem essa referência mantêm a checagem do corpo e bloqueiam alterações divergentes dos metadados até revisão das cópias local e remota. Espaços nas extremidades do assunto e da descrição são normalizados na validação de envio.
+
+## Correção do envio segmentado
+
+O caminho anterior para seleção individual usava uma prévia (`send-draft`), não publicação. A implementação corrigida publica ambos os modos, aplicando os filtros exatos no próprio pedido de `publish`, sem uma escrita intermediária de audiência no rascunho. Durante a preparação e confirmação, IDs, atividade e endereços são revalidados. Resultado incerto continua bloqueado e uma recusa de filtros nunca causa nova tentativa sem segmentação.
+
+O histórico de tentativas anteriores é preservado. Um `accepted` segmentado anterior a esta correção registra a aceitação de uma prévia, não comprova publicação. Essas campanhas não devem ser reinterpretadas como publicações ou reenviadas automaticamente.
+
+Referências: https://docs.buttondown.com/api-emails-filters e https://docs.buttondown.com/api-emails-publish.

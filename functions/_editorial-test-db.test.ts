@@ -118,3 +118,32 @@ it('prepara a campanha quando Buttondown retorna template nulo para usar o padrÃ
   expect(await response.json()).toMatchObject({ audienceMode: 'all_active', recipientCount: 2 })
   expect(vi.mocked(fetch).mock.calls.every(([url]) => !String(url).endsWith('/publish') && !String(url).endsWith('/send-draft'))).toBe(true)
 })
+
+it.each(['all_active', 'selected'] as const)('publica campanha %s uma Ãºnica vez e nunca usa send-draft', async mode => {
+  const { env } = setup()
+  env.CAMPAIGN_SENDING_ENABLED = 'true'
+  const original = vi.mocked(fetch).getMockImplementation()!
+  vi.mocked(fetch).mockImplementation(async (url, init) => {
+    if (String(url).includes('/subscribers/sub_one')) return Response.json({ id: 'sub_one', email_address: 'chosen@example.com', type: 'regular' })
+    if (String(url).includes('/subscribers?')) return Response.json({ count: 1, results: [] })
+    if (String(url).endsWith('/publish')) return Response.json({ id: 'em_test', status: 'about_to_send' })
+    return original(url, init)
+  })
+  const call = (input: object) => campaignPost({ env, request: new Request('https://example.com/api/campaign-delivery', { method: 'POST', body: JSON.stringify({ draftId: 'test-draft', cloudRevision: 4, ...input }) }) })
+  const response = await call({ action: 'prepare', audience: mode === 'selected' ? { mode, subscriberIds: ['sub_one'] } : { mode } })
+  expect(response.status).toBe(200)
+  const prepared = await response.json() as { attemptId: string }
+  expect(vi.mocked(fetch).mock.calls.some(([_url, init]) => init?.method === 'POST')).toBe(false)
+  expect((await call({ action: 'confirm', attemptId: prepared.attemptId, confirm: true })).status).toBe(200)
+  expect((await call({ action: 'confirm', attemptId: prepared.attemptId, confirm: true })).status).toBe(409)
+  const publishes = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/publish'))
+  expect(publishes).toHaveLength(1)
+  const payload = JSON.parse(publishes[0][1]!.body as string)
+  if (mode === 'selected') {
+    expect(payload.filters).toEqual({ predicate: 'and', filters: [], groups: [
+      { predicate: 'or', groups: [], filters: [{ field: 'subscriber.email_address', operator: 'equals', value: 'chosen@example.com' }] },
+      { predicate: 'or', groups: [], filters: ['regular', 'premium'].map(value => ({ field: 'subscriber.type', operator: 'equals', value })) },
+    ] })
+  } else expect(payload).toEqual({})
+  expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('/send-draft'))).toBe(false)
+})
