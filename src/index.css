@@ -804,7 +804,8 @@ a { color: inherit; text-decoration: none; }
 .send-check-card:last-child { border-bottom: 0; }
 .send-check-card.is-checked { background: color-mix(in srgb, var(--green-soft) 30%, var(--surface)); }
 .send-check-card-heading { display: grid; grid-template-columns: 28px minmax(0,1fr) auto; align-items: start; gap: 15px; }
-.send-check-toggle { display: grid; place-items: center; width: 25px; height: 25px; padding: 0; color: var(--green); background: transparent; border: 0; cursor: pointer; }
+.send-check-indicator { display: grid; place-items: center; width: 25px; height: 25px; color: var(--ink-3); }
+.send-check-indicator.is-ready { color: var(--green); }
 .send-empty-check { width: 19px; height: 19px; border: 2px solid var(--line-strong); border-radius: 50%; }
 .send-check-card h2 { margin: 0 0 9px; color: var(--ink); font-size: 18px; font-weight: 650; }
 .send-value { display: block; color: var(--ink-2); font-size: 14px; line-height: 1.5; }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, CheckCircle2, Info, Mail, Send, Users, X } from 'lucide-react'
+import { Check, CheckCircle2, Info, Mail, Send, X } from 'lucide-react'
 import { api } from '../lib/api'
 import type { ApiPage, DraftRecord, NewsletterSettings, Subscriber } from '../types'
 import { Button, ErrorState, Field } from './ui'
@@ -25,11 +25,12 @@ export function SendStage({ draft, settings, onPrepare, onEdit, onAdvance }: Pro
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
-  const [loading, setLoading] = useState(true)
+  const [countLoading, setCountLoading] = useState(true)
+  const [listLoading, setListLoading] = useState(false)
+  const loading = mode === 'all_active' ? countLoading : listLoading
   const [countError, setCountError] = useState('')
   const [listError, setListError] = useState('')
   const [testOpen, setTestOpen] = useState(false)
-  const [checked, setChecked] = useState({ audience: false, details: false, content: false })
 
   useEffect(() => {
     const timer = window.setTimeout(() => { setSearch(searchInput.trim()); setPage(1) }, 250)
@@ -40,11 +41,11 @@ export function SendStage({ draft, settings, onPrepare, onEdit, onAdvance }: Pro
     let active = true
     // Loading state belongs to the external subscriber request.
     // oxlint-disable-next-line react/set-state-in-effect
-    setLoading(true)
+    setCountLoading(true)
     void Promise.all([api.subscribers(1, '', 'regular'), api.subscribers(1, '', 'premium')])
       .then(([regular, premium]) => { if (active) { setActiveCount((regular.count || 0) + (premium.count || 0)); setCountError('') } })
       .catch((cause: unknown) => { if (active) setCountError(cause instanceof Error ? cause.message : 'Não foi possível consultar os assinantes.') })
-      .finally(() => { if (active) setLoading(false) })
+      .finally(() => { if (active) setCountLoading(false) })
     return () => { active = false }
   }, [])
 
@@ -53,11 +54,11 @@ export function SendStage({ draft, settings, onPrepare, onEdit, onAdvance }: Pro
     let active = true
     // Loading state belongs to the external subscriber request.
     // oxlint-disable-next-line react/set-state-in-effect
-    setLoading(true)
+    setListLoading(true)
     void Promise.all([api.subscribers(page, search, 'regular'), api.subscribers(page, search, 'premium')])
       .then(([regular, premium]) => { if (active) { setPages({ regular, premium }); setListError('') } })
       .catch((cause: unknown) => { if (active) setListError(cause instanceof Error ? cause.message : 'Não foi possível carregar os contatos ativos.') })
-      .finally(() => { if (active) setLoading(false) })
+      .finally(() => { if (active) setListLoading(false) })
     return () => { active = false }
   }, [mode, page, search])
 
@@ -71,63 +72,42 @@ export function SendStage({ draft, settings, onPrepare, onEdit, onAdvance }: Pro
   const error = mode === 'selected' ? listError : countError
   const technicalChecks = {
     audience: !loading && !error && count > 0,
-    subject: !loading && !error && draft.subject.trim().length > 0,
-    content: !loading && !error && Boolean(draft.document),
+    subject: draft.subject.trim().length > 0 && draft.subject.trim().length <= 200,
+    content: Boolean(draft.document),
   }
   const senderTechnical = settings.senderName.trim().length > 0 && emailPattern.test(settings.senderEmail.trim())
-  const audienceKey = `${mode}\u0000${activeCount ?? 'pending'}\u0000${selectedRows.map(contact => contact.id).join(',')}\u0000${page}\u0000${search}`
-  const subjectSenderKey = `${draft.subject}\u0000${settings.senderName}\u0000${settings.senderEmail}`
-  const contentKey = JSON.stringify(draft.document || draft.content)
-  useEffect(() => {
-    // A changed audience query or selection requires a new human check.
-    // oxlint-disable-next-line react/set-state-in-effect
-    setChecked(current => current.audience ? { ...current, audience: false } : current)
-  }, [audienceKey])
-  useEffect(() => {
-    // Review confirmations belong to the current subject and sender values.
-    // oxlint-disable-next-line react/set-state-in-effect
-    setChecked(current => current.details ? { ...current, details: false } : current)
-  }, [subjectSenderKey])
-  useEffect(() => {
-    // A changed document requires a new human preview check.
-    // oxlint-disable-next-line react/set-state-in-effect
-    setChecked(current => current.content ? { ...current, content: false } : current)
-  }, [contentKey])
   const senderConfigurationError = settings.senderEmail.trim().length > 0 && !senderTechnical
   const allTechnicalChecksPassed = technicalChecks.audience && technicalChecks.subject && technicalChecks.content && !senderConfigurationError
-  const allChecked = allTechnicalChecksPassed && Object.values(checked).every(Boolean)
 
   const toggle = (contact: Subscriber) => {
     if (!selected[contact.id] && selectedRows.length >= 500) return
-    setChecked(previous => ({ ...previous, audience: false }))
     setSelected(current => {
       if (current[contact.id]) { const next = { ...current }; delete next[contact.id]; return next }
       return { ...current, [contact.id]: contact }
     })
   }
-  const check = (key: keyof typeof checked) => setChecked(current => ({ ...current, [key]: !current[key] }))
-  const technicalMessage = loading ? '' : error || (!technicalChecks.audience ? 'Não há destinatários elegíveis para esta audiência.' : !technicalChecks.subject ? 'Informe um assunto antes de avançar.' : !technicalChecks.content ? 'O documento da edição ainda não está disponível.' : senderConfigurationError ? 'O endereço de referência do remetente é inválido.' : '')
+  const technicalMessage = loading ? '' : error || (!technicalChecks.audience ? 'Não há destinatários elegíveis para esta audiência.' : !technicalChecks.subject ? 'Informe um assunto com até 200 caracteres antes de avançar.' : !technicalChecks.content ? 'O documento da edição ainda não está disponível.' : senderConfigurationError ? 'O endereço de referência do remetente é inválido.' : '')
 
   return <section className="send-stage" aria-label="Etapa 3: envio">
-    <div className="send-stage-heading"><div><p className="eyebrow">ETAPA 03 · ENVIO</p><h1>Revise o envio</h1><p>Confira a audiência e os dados da edição antes de avançar para o resumo.</p></div><div className="send-stage-actions send-stage-actions-top"><Button variant="outline" onClick={() => onEdit('content')}>Voltar à prévia</Button><Button variant="outline" icon={<Mail size={16} />} onClick={() => setTestOpen(true)}>Enviar email de teste</Button><Button disabled={!allChecked || loading} onClick={() => onAdvance(mode === 'all_active' ? { mode } : { mode, subscriberIds: selectedRows.map(contact => contact.id) }, count, selectedRows)}>Avançar</Button></div></div>
+    <div className="send-stage-heading"><div><p className="eyebrow">ETAPA 03 · ENVIO</p><h1>Revise o envio</h1><p>Confira a audiência e os dados da edição antes de avançar para o resumo.</p></div><div className="send-stage-actions send-stage-actions-top"><Button variant="outline" onClick={() => onEdit('content')}>Voltar à prévia</Button><Button variant="outline" icon={<Mail size={16} />} onClick={() => setTestOpen(true)}>Enviar email de teste</Button><Button disabled={!allTechnicalChecksPassed} onClick={() => { if (allTechnicalChecksPassed) onAdvance(mode === 'all_active' ? { mode } : { mode, subscriberIds: selectedRows.map(contact => contact.id) }, count, selectedRows) }}>Avançar</Button></div></div>
     <div className="send-checklist">
-      <ChecklistCard title="Destinatários" icon={<Users size={20} />} checked={checked.audience} onCheck={() => check('audience')} onEdit={() => onEdit('audience')}>
+      <ChecklistCard title="Destinatários" ready={technicalChecks.audience} onEdit={() => onEdit('audience')}>
         <fieldset className="send-audience" disabled={loading}>
           <legend>Escolha a audiência</legend>
-          <label className={mode === 'all_active' ? 'is-selected' : ''}><input type="radio" name={`send-audience-${draft.id}`} checked={mode === 'all_active'} onChange={() => { setMode('all_active'); setChecked(current => ({ ...current, audience: false })) }} /><span><strong>Todos os assinantes</strong><small>Ativos e elegíveis</small></span><b>{activeCount ?? '—'}</b></label>
-          <label className={mode === 'selected' ? 'is-selected' : ''}><input type="radio" name={`send-audience-${draft.id}`} checked={mode === 'selected'} onChange={() => { setMode('selected'); setChecked(current => ({ ...current, audience: false })) }} /><span><strong>Escolher contatos</strong><small>Seleção individual</small></span><b>{selectedRows.length}</b></label>
+          <label className={mode === 'all_active' ? 'is-selected' : ''}><input type="radio" name={`send-audience-${draft.id}`} checked={mode === 'all_active'} onChange={() => setMode('all_active')} /><span><strong>Todos os assinantes</strong><small>Ativos e elegíveis</small></span><b>{activeCount ?? '—'}</b></label>
+          <label className={mode === 'selected' ? 'is-selected' : ''}><input type="radio" name={`send-audience-${draft.id}`} checked={mode === 'selected'} onChange={() => { setListLoading(true); setMode('selected') }} /><span><strong>Escolher contatos</strong><small>Seleção individual</small></span><b>{selectedRows.length}</b></label>
         </fieldset>
         {mode === 'selected' && <div className="send-contact-picker"><Field label="Buscar contatos ativos"><input type="search" value={searchInput} onChange={event => setSearchInput(event.target.value)} placeholder="Nome ou e-mail" /></Field><div className="send-contact-list">{contacts.map(contact => <label key={contact.id}><input type="checkbox" checked={Boolean(selected[contact.id])} onChange={() => toggle(contact)} /><span>{typeof contact.metadata?.name === 'string' ? contact.metadata.name : contact.email_address}<small>{contact.email_address}</small></span></label>)}{!contacts.length && <p>Nenhum contato ativo nesta página.</p>}</div><div className="send-pagination"><span>Página {page} de {totalPages}</span><span><button type="button" disabled={page <= 1} onClick={() => setPage(value => value - 1)}>Anterior</button><button type="button" disabled={page >= totalPages} onClick={() => setPage(value => value + 1)}>Próxima</button></span></div>{selectedRows.length > 0 && <div className="send-selected"><strong>Selecionados ({selectedRows.length}/500)</strong>{selectedRows.map(contact => <span key={contact.id}>{contact.email_address}</span>)}</div>}</div>}
         <TechnicalStatus valid={technicalChecks.audience}>{technicalChecks.audience ? 'Audiência carregada e com destinatários elegíveis.' : loading ? 'Consultando destinatários elegíveis…' : 'Nenhum destinatário elegível foi encontrado.'}</TechnicalStatus>
       </ChecklistCard>
-      <ChecklistCard title="Assunto e remetente" checked={checked.details} onCheck={() => check('details')} onEdit={() => onEdit('subject')}>
+      <ChecklistCard title="Assunto e remetente" ready={technicalChecks.subject && !senderConfigurationError} onEdit={() => onEdit('subject')}>
         <strong className="send-value">{draft.subject || 'Sem assunto'}</strong>
         <span className="send-value">{settings.senderName || 'Mário Serafim'}{settings.senderEmail ? ` · ${settings.senderEmail}` : ' · endereço configurado na Buttondown'}</span>
-        <TechnicalStatus valid={technicalChecks.subject}>{technicalChecks.subject ? 'Assunto preenchido pelo sistema.' : 'Assunto pendente.'}</TechnicalStatus>
-        <TechnicalStatus valid={senderTechnical}>{senderTechnical ? 'Endereço de referência disponível.' : 'Endereço do remetente não é verificável automaticamente; confira antes de avançar.'}</TechnicalStatus>
+        <TechnicalStatus valid={technicalChecks.subject}>{technicalChecks.subject ? 'Assunto preenchido.' : 'Informe um assunto com até 200 caracteres.'}</TechnicalStatus>
+        <TechnicalStatus valid={senderTechnical}>{senderTechnical ? 'Endereço de referência disponível; o envio usa o remetente configurado na Buttondown.' : senderConfigurationError ? 'Corrija o endereço de referência do remetente.' : 'O remetente é configurado na Buttondown e não pode ser verificado aqui.'}</TechnicalStatus>
       </ChecklistCard>
-      <ChecklistCard title="Conteúdo e prévia" checked={checked.content} onCheck={() => check('content')} onEdit={() => onEdit('content')}>
-        <span className="send-value">O layout está pronto e será enviado como HTML compatível com a newsletter.</span>
+      <ChecklistCard title="Conteúdo e prévia" ready={technicalChecks.content} onEdit={() => onEdit('content')}>
+        <span className="send-value">O conteúdo será preparado como HTML compatível com a newsletter.</span>
         <TechnicalStatus valid={technicalChecks.content}>{technicalChecks.content ? 'Documento carregado pelo sistema.' : 'Documento pendente.'}</TechnicalStatus>
       </ChecklistCard>
     </div>
@@ -140,8 +120,8 @@ function TechnicalStatus({ valid, children }: { valid: boolean; children: React.
   return <p className={`send-technical-status${valid ? ' is-valid' : ''}`}><span aria-hidden="true">{valid ? '✓' : '!'}</span>{children}</p>
 }
 
-function ChecklistCard({ title, checked, onCheck, onEdit, icon, children }: { title: string; checked: boolean; onCheck: () => void; onEdit?: () => void; icon?: React.ReactNode; children: React.ReactNode }) {
-  return <article className={`send-check-card${checked ? ' is-checked' : ''}`}><div className="send-check-card-heading"><button type="button" className="send-check-toggle" aria-label={`Verificar ${title}`} aria-pressed={checked} onClick={onCheck}>{checked ? <CheckCircle2 size={20} /> : icon || <span className="send-empty-check" />}</button><div><h2>{title}</h2><div>{children}</div></div>{onEdit && <Button size="sm" variant="outline" onClick={onEdit}>Editar</Button>}</div></article>
+function ChecklistCard({ title, ready, onEdit, children }: { title: string; ready: boolean; onEdit?: () => void; children: React.ReactNode }) {
+  return <article className={`send-check-card${ready ? ' is-checked' : ''}`}><div className="send-check-card-heading"><span className={`send-check-indicator${ready ? ' is-ready' : ''}`} role="img" aria-label={`${title}: ${ready ? 'pronto' : 'pendente'}`}>{ready ? <CheckCircle2 size={20} /> : <Info size={20} />}</span><div><h2>{title}</h2><div>{children}</div></div>{onEdit && <Button size="sm" variant="outline" onClick={onEdit}>Editar</Button>}</div></article>
 }
 
 function TestEmailDialog({ onPrepare, onClose }: TestDialogProps) {

@@ -20,40 +20,63 @@ function renderStage(onAdvance = vi.fn()) {
   return { onAdvance, ...render(<SendStage draft={draft} settings={settings} onPrepare={vi.fn()} onEdit={vi.fn()} onAdvance={onAdvance} />) }
 }
 
-it('mantém as três confirmações humanas desmarcadas mesmo quando as validações técnicas passam', async () => {
-  renderStage()
-  await waitFor(() => expect(screen.getByText('Audiência carregada e com destinatários elegíveis.')).toBeInTheDocument())
-  for (const label of ['Destinatários', 'Assunto e remetente', 'Conteúdo e prévia']) expect(screen.getByRole('button', { name: `Verificar ${label}` })).toHaveAttribute('aria-pressed', 'false')
-  expect(screen.getByRole('button', { name: 'Avançar' })).toBeDisabled()
-  expect(screen.getByText(/não é verificável automaticamente/)).toBeInTheDocument()
-})
-
-it('permite marcar e desmarcar as três confirmações sem equivaler à validação técnica', async () => {
+it('verifica automaticamente e permite avançar sem confirmações manuais', async () => {
   const { onAdvance } = renderStage()
-  await waitFor(() => expect(screen.getByText('Audiência carregada e com destinatários elegíveis.')).toBeInTheDocument())
-  for (const label of ['Destinatários', 'Assunto e remetente', 'Conteúdo e prévia']) fireEvent.click(screen.getByRole('button', { name: `Verificar ${label}` }))
-  expect(screen.getByRole('button', { name: 'Avançar' })).toBeEnabled()
-  fireEvent.click(screen.getByRole('button', { name: 'Verificar Assunto e remetente' }))
-  expect(screen.getByRole('button', { name: 'Avançar' })).toBeDisabled()
-  fireEvent.click(screen.getByRole('button', { name: 'Verificar Assunto e remetente' }))
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Avançar' })).toBeEnabled())
+  for (const title of ['Destinatários', 'Assunto e remetente', 'Conteúdo e prévia']) expect(screen.getByRole('img', { name: `${title}: pronto` })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /^Verificar / })).not.toBeInTheDocument()
+  expect(screen.getByText(/não pode ser verificado aqui/)).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Avançar' }))
-  expect(onAdvance).toHaveBeenCalledOnce()
+  expect(onAdvance).toHaveBeenCalledWith({ mode: 'all_active' }, 2, [])
 })
 
-it('invalida a audiência quando a seleção muda e bloqueia após falha técnica', async () => {
-  const { onAdvance, rerender } = renderStage()
-  await waitFor(() => expect(screen.getByText('Audiência carregada e com destinatários elegíveis.')).toBeInTheDocument())
-  fireEvent.click(screen.getByRole('button', { name: 'Verificar Destinatários' }))
-  fireEvent.click(screen.getByRole('button', { name: 'Verificar Assunto e remetente' }))
-  rerender(<SendStage draft={{ ...draft, subject: '' }} settings={settings} onPrepare={vi.fn()} onEdit={vi.fn()} onAdvance={onAdvance} />)
-  expect(screen.getByRole('button', { name: 'Verificar Assunto e remetente' })).toHaveAttribute('aria-pressed', 'false')
-
-  mocks.subscribers.mockRejectedValue(new Error('Falha de consulta'))
-  fireEvent.click(screen.getByRole('radio', { name: /Escolher contatos/ }))
-  expect(screen.getByRole('button', { name: 'Verificar Destinatários' })).toHaveAttribute('aria-pressed', 'false')
-  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Falha de consulta'))
-  fireEvent.click(screen.getByRole('button', { name: 'Verificar Assunto e remetente' }))
-  fireEvent.click(screen.getByRole('button', { name: 'Verificar Conteúdo e prévia' }))
+it('atualiza os avisos quando assunto ou documento são corrigidos', async () => {
+  const { rerender, onAdvance } = renderStage()
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Avançar' })).toBeEnabled())
+  const view = (value: DraftRecord) => <SendStage draft={value} settings={settings} onPrepare={vi.fn()} onEdit={vi.fn()} onAdvance={onAdvance} />
+  rerender(view({ ...draft, subject: '' }))
+  expect(screen.getByRole('img', { name: 'Assunto e remetente: pendente' })).toBeInTheDocument()
+  expect(screen.getByRole('img', { name: 'Conteúdo e prévia: pronto' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Avançar' })).toBeDisabled()
-  expect(onAdvance).not.toHaveBeenCalled()
+  rerender(view({ ...draft, document: undefined }))
+  expect(screen.getByRole('img', { name: 'Conteúdo e prévia: pendente' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Avançar' })).toBeDisabled()
+  rerender(view({ ...draft, subject: 'a'.repeat(201) }))
+  expect(screen.getByRole('button', { name: 'Avançar' })).toBeDisabled()
+  rerender(view(draft))
+  expect(screen.getByRole('button', { name: 'Avançar' })).toBeEnabled()
+})
+
+it('verifica destinatários selecionados automaticamente e bloqueia seleção vazia', async () => {
+  renderStage()
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Avançar' })).toBeEnabled())
+  fireEvent.click(screen.getByRole('radio', { name: /Escolher contatos/ }))
+  await screen.findByRole('checkbox')
+  expect(screen.getByRole('img', { name: 'Destinatários: pendente' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Avançar' })).toBeDisabled()
+  fireEvent.click(screen.getByRole('checkbox'))
+  expect(screen.getByRole('img', { name: 'Destinatários: pronto' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Avançar' })).toBeEnabled()
+  fireEvent.click(screen.getByRole('checkbox'))
+  expect(screen.getByRole('button', { name: 'Avançar' })).toBeDisabled()
+})
+
+it('falha na consulta de destinatários não invalida assunto nem conteúdo', async () => {
+  mocks.subscribers.mockRejectedValue(new Error('Falha de consulta'))
+  renderStage()
+  await screen.findByRole('alert')
+  expect(screen.getByRole('img', { name: 'Destinatários: pendente' })).toBeInTheDocument()
+  expect(screen.getByRole('img', { name: 'Assunto e remetente: pronto' })).toBeInTheDocument()
+  expect(screen.getByRole('img', { name: 'Conteúdo e prévia: pronto' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Avançar' })).toBeDisabled()
+})
+
+it('bloqueia referência de remetente inválida e retoma ao corrigir', async () => {
+  const { rerender, onAdvance } = renderStage()
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Avançar' })).toBeEnabled())
+  rerender(<SendStage draft={draft} settings={{ ...settings, senderEmail: 'invalido' }} onPrepare={vi.fn()} onEdit={vi.fn()} onAdvance={onAdvance} />)
+  expect(screen.getByRole('img', { name: 'Assunto e remetente: pendente' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Avançar' })).toBeDisabled()
+  rerender(<SendStage draft={draft} settings={{ ...settings, senderEmail: 'editor@example.com' }} onPrepare={vi.fn()} onEdit={vi.fn()} onAdvance={onAdvance} />)
+  expect(screen.getByRole('button', { name: 'Avançar' })).toBeEnabled()
 })
