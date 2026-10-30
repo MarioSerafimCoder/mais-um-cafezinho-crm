@@ -13,7 +13,7 @@ const databases: DatabaseSync[] = []
 afterEach(() => { vi.unstubAllGlobals(); databases.splice(0).forEach(db => db.close()) })
 function setup({ draftTemplate = 'classic', remoteTemplate = 'classic' }: { draftTemplate?: 'classic' | 'modern'; remoteTemplate?: string | null } = {}) {
   const db = new DatabaseSync(':memory:'); databases.push(db)
-  for (const name of ['0001_editorial_documents', '0002_editorial_tests', '0003_campaign_send_attempts', '0004_editorial_test_results']) db.exec(readFileSync(`migrations/${name}.sql`, 'utf8'))
+  for (const name of ['0001_editorial_documents', '0002_editorial_tests', '0003_campaign_send_attempts', '0004_editorial_test_results', '0006_campaign_reconciliation']) db.exec(readFileSync(`migrations/${name}.sql`, 'utf8'))
   const body = '<p>Teste</p>'
   const draft = { id: 'test-draft', subject: 'Uma newsletter nova', document: { type: 'doc' }, buttondownId: 'em_test', buttondownTemplate: draftTemplate, revision: 2, syncedRevision: 2, cloudSavedRevision: 2, syncedBodyHash: createHash('sha256').update(body).digest('hex') }
   db.prepare('INSERT INTO editorial_documents (kind, id, payload, version, updated_at) VALUES (?, ?, ?, ?, ?)').run('draft', draft.id, JSON.stringify(draft), 4, new Date().toISOString())
@@ -147,4 +147,48 @@ it.each(['all_active', 'selected'] as const)('publica campanha %s uma única vez
     ] })
   } else expect(payload).toEqual({ filters: activeAudienceFilters() })
   expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('/send-draft'))).toBe(false)
+})
+
+it.each(['timeout', 'null', 'wrong-id', 'draft', 'missing-status'])('reconcilia publicação com resposta %s sem repetir POST publish', async kind => {
+  const { env, db } = setup(); env.CAMPAIGN_SENDING_ENABLED = 'true'
+  const campaign = { id: 'em_test', status: 'draft', body: '<p>Teste</p>', subject: 'Uma newsletter nova', template: 'classic' }
+  let remote: Record<string, unknown> = campaign
+  let publishes = 0
+  vi.mocked(fetch).mockImplementation(async (url, init) => {
+    if (String(url).includes('/subscribers?')) return Response.json({ results: [], count: 1 })
+    if (String(url).endsWith('/publish')) {
+      publishes++
+      remote = { ...campaign, ...JSON.parse(init!.body as string), status: 'sent' }
+      if (kind === 'timeout') throw new TypeError('timeout')
+      return Response.json(kind === 'null' ? null : kind === 'wrong-id' ? { id: 'em_other', status: 'sent' } : kind === 'missing-status' ? { id: 'em_test' } : { id: 'em_test', status: 'draft' })
+    }
+    return Response.json(remote)
+  })
+  const call = (input: object) => campaignPost({ env, request: new Request('https://example.com/api/campaign-delivery', { method: 'POST', body: JSON.stringify({ draftId: 'test-draft', cloudRevision: 4, ...input }) }) })
+  const prepared = await (await call({ action: 'prepare', audience: { mode: 'all_active' } })).json() as { attemptId: string }
+  expect((await call({ action: 'confirm', attemptId: prepared.attemptId, confirm: true })).status).toBe(502)
+  expect(db.prepare('SELECT state FROM campaign_send_attempts WHERE id = ?').get(prepared.attemptId)?.state).toBe('attempted')
+  env.CAMPAIGN_SENDING_ENABLED = 'false'
+  const reconciled = await call({ action: 'reconcile', attemptId: prepared.attemptId })
+  expect((await reconciled.json()).attempt).toMatchObject({ state: 'accepted', provider_status: 'sent' })
+  const history = await campaignGet({ env, request: new Request('https://example.com/api/campaign-delivery?history=1&draftId=test-draft') })
+  expect((await history.json()).attempts).toHaveLength(1)
+  expect(publishes).toBe(1)
+})
+it.each(['draft', 'changed', '404'])('não desbloqueia nem aceita uma tentativa incerta com remoto %s', async kind => {
+  const { env, db } = setup(); env.CAMPAIGN_SENDING_ENABLED = 'true'
+  const campaign = { id: 'em_test', status: 'draft', body: '<p>Teste</p>', subject: 'Uma newsletter nova', template: 'classic' }
+  let remote: Record<string, unknown> = campaign
+  let sent = false
+  vi.mocked(fetch).mockImplementation(async (url, init) => {
+    if (String(url).includes('/subscribers?')) return Response.json({ results: [], count: 1 })
+    if (String(url).endsWith('/publish')) { remote = { ...campaign, ...JSON.parse(init!.body as string), status: 'sent' }; sent = true; throw new TypeError('timeout') }
+    return sent && kind === '404' ? Response.json({}, { status: 404 }) : Response.json(sent ? { ...remote, ...(kind === 'draft' ? { status: 'draft' } : { body: '<p>Outra edição</p>' }) } : campaign)
+  })
+  const call = (input: object) => campaignPost({ env, request: new Request('https://example.com/api/campaign-delivery', { method: 'POST', body: JSON.stringify({ draftId: 'test-draft', cloudRevision: 4, ...input }) }) })
+  const prepared = await (await call({ action: 'prepare', audience: { mode: 'all_active' } })).json() as { attemptId: string }
+  await call({ action: 'confirm', attemptId: prepared.attemptId, confirm: true })
+  await call({ action: 'reconcile', attemptId: prepared.attemptId })
+  expect(db.prepare('SELECT state FROM campaign_send_attempts WHERE id = ?').get(prepared.attemptId)?.state).toBe('attempted')
+  expect((await call({ action: 'confirm', attemptId: prepared.attemptId, confirm: true })).status).toBe(409)
 })

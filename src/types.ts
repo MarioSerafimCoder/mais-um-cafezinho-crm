@@ -131,3 +131,5 @@ export type NewsletterSettings = {
   theme: 'light' | 'dark'
   cloudRevision?: number
 }
+
+export type CampaignAttempt = { publication_hash?: string | null; id: string; draft_id: string; campaign_id: string; subject: string; state: string; audience_count: number; provider_status?: string | null; observed_at?: string | null; created_at: string }

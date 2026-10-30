@@ -23,6 +23,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  campaignAttempts: (draftId?: string, cursor?: string) => request<{ next?: string | null; attempts: import('../types').CampaignAttempt[] }>(`/api/campaign-delivery?history=1${draftId ? `&draftId=${encodeURIComponent(draftId)}` : ''}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`),
+  reconcileCampaignAttempt: (draftId: string, attemptId: string) => request<{ attempt: import('../types').CampaignAttempt }>('/api/campaign-delivery', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'reconcile', draftId, attemptId }) }),
   status: async () => {
     if (import.meta.env.DEV && import.meta.env.MODE === 'demo') return { configured: false, connected: false, demo: true, cloud: false }
     return request<IntegrationStatus>('/api/status')

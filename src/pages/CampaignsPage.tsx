@@ -1,3 +1,4 @@
+import { CampaignHistory } from '../components/CampaignHistory'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api'
@@ -93,6 +94,7 @@ export function CampaignsPage() {
   const loading = cloudBusy || remoteBusy
   return <>
     <PageTitle eyebrow="ARQUIVO DE EDIÇÕES" title="Edições" description="Suas edições, da primeira ideia à publicação." action={<Link to="/editor/new"><Button>Nova edição</Button></Link>} />
+    <details><summary>Histórico e resultados de envio</summary><CampaignHistory /></details>
     <details className="recovery-import"><summary>Recuperar um backup</summary><p>Importe JSON do editor ou de um backup local. Os rascunhos entram como cópias novas, sem substituir edições ou vínculos da Buttondown.</p><input aria-label="Importar cópias de recuperação" type="file" accept="application/json,.json" onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; if (file.size > 5_000_000) { setError('O backup excede o limite de 5 MB.'); return } void file.text().then(async (text) => { const { importRecoveryCopies } = await import('../lib/recovery'); importRecoveryCopies(text); setError(''); setReload((value) => value + 1) }).catch((cause) => setError(cause instanceof Error ? cause.message : 'Falha ao importar backup.')) }} /></details>
 
     <label className="search-box"><input type="search" placeholder="Buscar edição pelo assunto" aria-label="Buscar edição" value={search} onChange={event => setSearch(event.target.value)} /></label>

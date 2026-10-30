@@ -11,7 +11,7 @@ Em 30/10/2026, o proprietário autorizou habilitar o fluxo de envio de produçã
 - “Todos” considera a política compartilhada de tipos confirmados em `shared/audience.ts`. A campanha precisa estar em draft e sem filtros de audiência; o servidor consulta a contagem antes de preparar e novamente antes de confirmar.
 - A seleção individual inclui apenas assinantes da mesma política de tipos confirmados, permite até 500 contatos e valida IDs, status e endereços no servidor. O e-mail confirmado é o mesmo endereço validado antes do envio.
 - O servidor exige a revisão atual salva no D1 e sincronizada, consulta a campanha remota e compara assunto, hash do corpo enviado, template, descrição e audiência antes de aceitar a confirmação. Rascunhos antigos sem hash registrado precisam ser sincronizados novamente antes do primeiro envio.
-- Ambas as audiências usam `POST /emails/{id}/publish`. Para contatos selecionados, o mesmo pedido de publicação aplica filtros: OR dos endereços exatos revalidados e AND com tipos ativos (`regular` ou `premium`). Os filtros são construídos no servidor a partir dos IDs confirmados, nunca recebidos do navegador. Não existe fallback para publicação sem filtro. `/send-draft` pertence exclusivamente ao envio de testes, com o prefixo de prévia do provedor.
+- Ambas as audiências usam `POST /emails/{id}/publish`. Para contatos selecionados, o mesmo pedido de publicação aplica filtros: OR dos endereços exatos revalidados e AND com os nove tipos da política compartilhada em `shared/audience.ts`. Os filtros são construídos no servidor a partir dos IDs confirmados, nunca recebidos do navegador. Não existe fallback para publicação sem filtro. `/send-draft` pertence exclusivamente ao envio de testes, com o prefixo de prévia do provedor.
 - Uma tentativa fica registrada no D1 antes da chamada externa. Cada campanha remota admite uma única preparação/envio ativo ou aceito, mesmo se o rascunho for revisado depois. Resultado incerto permanece bloqueado; não há retry automático. Preparações podem ser canceladas ou expiram após dez minutos. Respostas HTTP 4xx conclusivas, exceto conflito 409, são registradas como rejeitadas e não são tratadas como aceitação.
 - “Aceito pela Buttondown” não significa entregue nem recebido. O CRM apresenta apenas a aceitação da solicitação; confirmação de recebimento exige observar a mensagem na caixa postal.
 
@@ -48,3 +48,11 @@ A revalidação individual usa `GET /subscribers` com `ids` repetidos, em lotes 
 O envio de testes mantém resultado por destino: aceito, recusado, não enviado ou incerto. Resultados persistem no navegador por edição e o servidor mantém a trilha em D1. Interrupção durante envio vira resultado incerto ao reabrir. Somente não enviados/recusados podem ser repetidos; é possível acrescentar outros destinos sem repetir aceitos ou incertos.
 
 Fontes: https://docs.buttondown.com/api-subscribers-list e https://docs.buttondown.com/api-filtering.
+
+## Revisões e reconciliação
+
+O histórico local de testes utiliza edição + revisão. As chaves antigas por edição permanecem intactas, mas não são atribuídas a uma revisão desconhecida nem bloqueiam novos testes. Respostas de um teste em andamento são registradas na revisão efetivamente sincronizada, preservando revisões anteriores.
+
+A migração 0006 acrescenta o estado remoto observado, data de consulta e hash da publicação esperada às tentativas de campanha. HTTP 2xx só vira aceitação quando a resposta traz o ID exato e um estado de publicação reconhecido. Respostas inesperadas permanecem attempted, com repetição bloqueada.
+
+O histórico na tela Edições e no resumo de um envio incerto permite consultar a Buttondown sem republicar. A reconciliação promove attempted para accepted somente se ID, estado, conteúdo e filtros corresponderem à publicação esperada. Rascunho, ausência de campanha, divergência ou erro de consulta não autorizam reenvio. Tentativas antigas sem hash de publicação exigem revisão manual; seu histórico não é reclassificado automaticamente.

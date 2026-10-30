@@ -1,3 +1,4 @@
+import { CampaignHistory } from './CampaignHistory'
 import { useEffect, useRef, useState } from 'react'
 import { CheckCircle2, Info, Send } from 'lucide-react'
 import { api, ApiError } from '../lib/api'
@@ -42,5 +43,6 @@ export function SendSummary({ draft, prepared, onBack }: Props) {
       <div className="send-summary-actions"><Button variant="outline" onClick={onBack} disabled={state === 'confirming'}>Voltar à preparação</Button>{state === 'ready' && <Button icon={<Send size={15} />} disabled={changed || expired} onClick={() => void confirm()}>Confirmar e enviar campanha</Button>}{state === 'confirming' && <Button disabled>Enviando campanha…</Button>}{state === 'sent' && <Button disabled>Campanha aceita</Button>}</div>
       {message && <p className={`send-summary-message ${state === 'sent' ? 'is-success' : 'is-error'}`} role={state === 'sent' ? 'status' : 'alert'}>{state === 'sent' ? <CheckCircle2 size={16} /> : <Info size={16} />}{message}</p>}
     </div><aside className="send-summary-side"><span className="eyebrow">CONFIRMAÇÃO FINAL</span><h2>Pronta para enviar</h2><p>A audiência e a edição foram validadas na etapa 3. O envio real acontece ao clicar em “Confirmar e enviar campanha”.</p><p>A aceitação pela Buttondown não comprova entrega na caixa de entrada.</p></aside></div>
+    {state === 'uncertain' && <CampaignHistory draftId={draft.id} />}
   </section>
 }

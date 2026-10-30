@@ -1,5 +1,5 @@
 import { sendTestBatch, type TestResults } from '../lib/test-delivery'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { CheckCircle2, Info, Mail, Send, X } from 'lucide-react'
 import { api } from '../lib/api'
 import type { ApiPage, DraftRecord, NewsletterSettings, Subscriber } from '../types'
@@ -13,7 +13,7 @@ type Props = {
   onEdit: (target: 'subject' | 'content' | 'audience') => void
   onAdvance: (audience: Audience, count: number, recipients: Subscriber[]) => void | Promise<void>
 }
-type TestDialogProps = { onPrepare: () => Promise<DraftRecord>; onClose: () => void; results: TestResults; onResult: (email: string, result: TestResults[string]) => void }
+type TestDialogProps = { onPrepare: () => Promise<DraftRecord>; onClose: () => void; results: TestResults; onResult: (email: string, result: TestResults[string], revision?: number) => void }
 
 const pageSize = 25
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -33,16 +33,19 @@ export function SendStage({ draft, settings, onPrepare, onEdit, onAdvance }: Pro
   const [listError, setListError] = useState('')
   const [preparing, setPreparing] = useState(false)
   const [preparationError, setPreparationError] = useState('')
-  const testStorageKey = `cafezinho:test-results:${draft.id}`
-  const [testResults, setTestResults] = useState<TestResults>(() => {
+  const testStorageKey = `cafezinho:test-results:${draft.id}:revision:${draft.revision || 0}`
+  const [testHistories, setTestHistories] = useState<Record<string, TestResults>>({})
+  const storedTestResults = useMemo(() => {
     const saved = JSON.parse(localStorage.getItem(testStorageKey) || '{}') as TestResults
-    return Object.fromEntries(Object.entries(saved).map(([email, result]) => [email, result.state === 'sending' ? { state: 'uncertain', message: 'Sessão interrompida. Consulte o histórico antes de repetir.' } : result]))
-  })
-  const latestTestResults = useRef(testResults)
-  const recordTestResult = (email: string, result: TestResults[string]) => {
-    const next = { ...latestTestResults.current, [email]: result }
-    localStorage.setItem(testStorageKey, JSON.stringify(next))
-    latestTestResults.current = next; setTestResults(next)
+    return Object.fromEntries(Object.entries(saved).map(([email, result]) => [email, result.state === 'sending' ? { state: 'uncertain' as const, message: 'Sessão interrompida. Consulte o histórico antes de repetir.' } : result]))
+  }, [testStorageKey])
+  const testResults = testHistories[testStorageKey] || storedTestResults
+  const recordTestResult = (email: string, result: TestResults[string], revision = draft.revision || 0) => {
+    const key = `cafezinho:test-results:${draft.id}:revision:${revision}`
+    const previous = JSON.parse(localStorage.getItem(key) || '{}') as TestResults
+    const next = { ...previous, [email]: result }
+    localStorage.setItem(key, JSON.stringify(next))
+    setTestHistories(current => ({ ...current, [key]: next }))
   }
   const [testOpen, setTestOpen] = useState(false)
 

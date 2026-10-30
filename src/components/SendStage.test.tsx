@@ -113,3 +113,23 @@ it('mostra sucessos e falhas e preserva resultados ao reabrir o diálogo', async
   await waitFor(() => expect(mocks.editorialTest).toHaveBeenCalledTimes(2))
   expect(mocks.editorialTest.mock.calls.every(([input]) => input.recipient === 'b@example.com')).toBe(true)
 })
+
+it('permite testar a nova revisão ao mesmo destinatário preservando o histórico anterior', async () => {
+  localStorage.setItem(`cafezinho:test-results:${draft.id}`, JSON.stringify({ 'a@example.com': { state: 'accepted' } }))
+  let current = { ...draft, revision: 1, buttondownId: 'em_test', cloudRevision: 1 }
+  mocks.editorialTest.mockImplementation(async input => input.confirm ? { accepted: true } : { attemptId: 'attempt' })
+  const view = render(<SendStage draft={current} settings={settings} onPrepare={async () => current} onEdit={vi.fn()} onAdvance={vi.fn()} />)
+  const send = async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar email de teste' }))
+    fireEvent.change(screen.getByLabelText('E-mail para envio do teste'), { target: { value: 'a@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar o teste' }))
+    await screen.findByText(/Aceito pela Buttondown/)
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+  }
+  await send()
+  current = { ...current, revision: 2, subject: 'Conteúdo revisado' }
+  view.rerender(<SendStage draft={current} settings={settings} onPrepare={async () => current} onEdit={vi.fn()} onAdvance={vi.fn()} />)
+  await send()
+  expect(mocks.editorialTest).toHaveBeenCalledTimes(4)
+  for (const suffix of ['', ':revision:1', ':revision:2']) expect(JSON.parse(localStorage.getItem(`cafezinho:test-results:${draft.id}${suffix}`)!)['a@example.com'].state).toBe('accepted')
+})
