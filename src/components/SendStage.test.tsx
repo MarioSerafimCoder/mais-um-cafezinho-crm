@@ -1,10 +1,11 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { ApiError } from '../lib/api'
 import { SendStage } from './SendStage'
 import type { DraftRecord, NewsletterSettings } from '../types'
 
 const mocks = vi.hoisted(() => ({ subscribers: vi.fn(), editorialTest: vi.fn() }))
-vi.mock('../lib/api', () => ({ api: { subscribers: mocks.subscribers, editorialTest: mocks.editorialTest } }))
+vi.mock('../lib/api', async importOriginal => ({ ...await importOriginal<typeof import('../lib/api')>(), api: { subscribers: mocks.subscribers, editorialTest: mocks.editorialTest } }))
 
 const draft = { id: 'draft-send', subject: 'Assunto da edição', content: '<p>Conteúdo</p>', document: { type: 'grapesjs', version: 3, format: 'mjml', styles: [], components: [{ type: 'mj-mjml', tagName: 'mjml', components: [] }] }, status: 'draft', templateId: null, updatedAt: '2026-10-29T10:00:00Z' } as DraftRecord
 const settings: NewsletterSettings = { newsletterName: 'Mais um Cafezinho', senderName: 'Mário Serafim', senderEmail: '', blogUrl: '', portfolioUrl: '', instagramUrl: '', linkedinUrl: '', theme: 'light' }
@@ -12,6 +13,7 @@ const page = { results: [{ id: 'sub-1', email_address: 'leitor@example.com', typ
 
 afterEach(cleanup)
 beforeEach(() => {
+  localStorage.clear()
   mocks.subscribers.mockReset().mockResolvedValue(page)
   mocks.editorialTest.mockReset()
 })
@@ -27,7 +29,7 @@ it('verifica automaticamente e permite avançar sem confirmações manuais', asy
   expect(screen.queryByRole('button', { name: /^Verificar / })).not.toBeInTheDocument()
   expect(screen.getByText(/não pode ser verificado aqui/)).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Preparar envio e ver resumo' }))
-  await waitFor(() => expect(onAdvance).toHaveBeenCalledWith({ mode: 'all_active' }, 2, []))
+  await waitFor(() => expect(onAdvance).toHaveBeenCalledWith({ mode: 'all_active' }, 1, []))
 })
 
 it('atualiza os avisos quando assunto ou documento são corrigidos', async () => {
@@ -88,4 +90,26 @@ it('mantém na preparação e mostra falha ao preparar', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Preparar envio e ver resumo' }))
   await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Envio desativado'))
   expect(screen.getByRole('button', { name: 'Preparar envio e ver resumo' })).toBeEnabled()
+})
+
+it('mostra sucessos e falhas e preserva resultados ao reabrir o diálogo', async () => {
+  mocks.editorialTest.mockImplementation(async input => {
+    if (!input.confirm) return { attemptId: input.recipient }
+    if (input.recipient === 'b@example.com') throw new ApiError('Recusado', 502, 'rejected')
+    if (input.recipient === 'c@example.com') throw new ApiError('Timeout', 0)
+    return { accepted: true }
+  })
+  render(<SendStage draft={draft} settings={settings} onPrepare={async () => ({ ...draft, buttondownId: 'em_test', cloudRevision: 1 })} onEdit={vi.fn()} onAdvance={vi.fn()} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Enviar email de teste' }))
+  fireEvent.change(screen.getByLabelText('E-mail para envio do teste'), { target: { value: 'a@example.com,b@example.com,c@example.com' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Enviar o teste' }))
+  await screen.findByText(/Resultado incerto — repetição bloqueada/)
+  expect(screen.getByText(/Aceito pela Buttondown/)).toBeInTheDocument()
+  expect(screen.getByText(/Não enviado — recusado/)).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Enviar email de teste' }))
+  mocks.editorialTest.mockClear().mockImplementation(async input => input.confirm ? { accepted: true } : { attemptId: 'retry' })
+  fireEvent.click(screen.getByRole('button', { name: 'Repetir somente não enviados' }))
+  await waitFor(() => expect(mocks.editorialTest).toHaveBeenCalledTimes(2))
+  expect(mocks.editorialTest.mock.calls.every(([input]) => input.recipient === 'b@example.com')).toBe(true)
 })

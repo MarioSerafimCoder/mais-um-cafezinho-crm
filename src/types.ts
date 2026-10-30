@@ -43,6 +43,7 @@ export type CampaignDeliveryStatus = {
 }
 
 export type PreparedCampaignDelivery = {
+  countIsEstimate?: boolean
   attemptId: string
   audienceMode: 'all_active' | 'selected'
   recipientCount: number

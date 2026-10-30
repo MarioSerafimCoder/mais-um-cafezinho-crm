@@ -1,5 +1,6 @@
 /// <reference types="node" />
 // @vitest-environment node
+import { activeAudienceFilters } from '../shared/audience'
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite'
 import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
@@ -104,8 +105,8 @@ it('habilita o painel de campanhas apenas com a flag explícita', async () => {
   env.CAMPAIGN_SENDING_ENABLED = 'true'
   vi.mocked(fetch).mockImplementation(async () => Response.json({ count: 6, results: [] }))
   const response = await campaignGet({ env, request: new Request('https://example.com/api/campaign-delivery') })
-  expect(await response.json()).toEqual({ enabled: true, activeCount: 12, selectedLimit: 500 })
-  expect(fetch).toHaveBeenCalledTimes(2)
+  expect(await response.json()).toEqual({ enabled: true, activeCount: 6, selectedLimit: 500 })
+  expect(fetch).toHaveBeenCalledTimes(1)
 })
 it('prepara a campanha quando Buttondown retorna template nulo para usar o padrão da newsletter', async () => {
   const { env } = setup({ draftTemplate: 'classic', remoteTemplate: null })
@@ -115,7 +116,7 @@ it('prepara a campanha quando Buttondown retorna template nulo para usar o padr�
     : Response.json({ id: 'em_test', status: 'draft', body: '<p>Teste</p>', subject: 'Uma newsletter nova', template: null, filters: { filters: [], groups: [] }, email_type: 'public' }))
   const response = await campaignPost({ env, request: new Request('https://example.com/api/campaign-delivery', { method: 'POST', body: JSON.stringify({ action: 'prepare', draftId: 'test-draft', cloudRevision: 4, audience: { mode: 'all_active' } }) }) })
   expect(response.status).toBe(200)
-  expect(await response.json()).toMatchObject({ audienceMode: 'all_active', recipientCount: 2 })
+  expect(await response.json()).toMatchObject({ audienceMode: 'all_active', recipientCount: 1 })
   expect(vi.mocked(fetch).mock.calls.every(([url]) => !String(url).endsWith('/publish') && !String(url).endsWith('/send-draft'))).toBe(true)
 })
 
@@ -124,7 +125,7 @@ it.each(['all_active', 'selected'] as const)('publica campanha %s uma única vez
   env.CAMPAIGN_SENDING_ENABLED = 'true'
   const original = vi.mocked(fetch).getMockImplementation()!
   vi.mocked(fetch).mockImplementation(async (url, init) => {
-    if (String(url).includes('/subscribers/sub_one')) return Response.json({ id: 'sub_one', email_address: 'chosen@example.com', type: 'regular' })
+    if (new URL(String(url)).searchParams.has('ids')) return Response.json({ results: [{ id: 'sub_one', email_address: 'chosen@example.com', type: 'regular' }], count: 1, next: null })
     if (String(url).includes('/subscribers?')) return Response.json({ count: 1, results: [] })
     if (String(url).endsWith('/publish')) return Response.json({ id: 'em_test', status: 'about_to_send' })
     return original(url, init)
@@ -142,8 +143,8 @@ it.each(['all_active', 'selected'] as const)('publica campanha %s uma única vez
   if (mode === 'selected') {
     expect(payload.filters).toEqual({ predicate: 'and', filters: [], groups: [
       { predicate: 'or', groups: [], filters: [{ field: 'subscriber.email_address', operator: 'equals', value: 'chosen@example.com' }] },
-      { predicate: 'or', groups: [], filters: ['regular', 'premium'].map(value => ({ field: 'subscriber.type', operator: 'equals', value })) },
+      activeAudienceFilters(),
     ] })
-  } else expect(payload).toEqual({})
+  } else expect(payload).toEqual({ filters: activeAudienceFilters() })
   expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('/send-draft'))).toBe(false)
 })

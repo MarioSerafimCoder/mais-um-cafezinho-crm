@@ -56,6 +56,12 @@ export async function parseJson(request: Request, limit = 220_000) {
   }
 }
 
+function retryAfterMs(value: string | null) {
+  if (!value) return 1000
+  const seconds = Number(value)
+  return Number.isFinite(seconds) ? Math.max(0, seconds * 1000) : Math.max(0, Date.parse(value) - Date.now()) || 1000
+}
+
 export async function buttondown(context: RequestContext, path: string, init: RequestInit = {}) {
   const key = context.env.BUTTONDOWN_API_KEY?.trim()
   if (!key) throw new Error('BUTTONDOWN_NOT_CONFIGURED')
@@ -68,7 +74,7 @@ export async function buttondown(context: RequestContext, path: string, init: Re
   if (response.status >= 300 && response.status < 400) throw new TypeError('Unexpected Buttondown redirect')
   if (!response.ok) {
     const error = new Error(`BUTTONDOWN_${response.status}`)
-    Object.assign(error, { status: response.status })
+    Object.assign(error, { status: response.status, retryAfterMs: retryAfterMs(response.headers.get('Retry-After')) })
     throw error
   }
   if (response.status === 204) return null

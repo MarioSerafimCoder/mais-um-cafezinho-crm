@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Check, CheckCircle2, Info, Mail, Send, X } from 'lucide-react'
+import { sendTestBatch, type TestResults } from '../lib/test-delivery'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { CheckCircle2, Info, Mail, Send, X } from 'lucide-react'
 import { api } from '../lib/api'
 import type { ApiPage, DraftRecord, NewsletterSettings, Subscriber } from '../types'
 import { Button, ErrorState, Field } from './ui'
@@ -12,7 +13,7 @@ type Props = {
   onEdit: (target: 'subject' | 'content' | 'audience') => void
   onAdvance: (audience: Audience, count: number, recipients: Subscriber[]) => void | Promise<void>
 }
-type TestDialogProps = { onPrepare: () => Promise<DraftRecord>; onClose: () => void }
+type TestDialogProps = { onPrepare: () => Promise<DraftRecord>; onClose: () => void; results: TestResults; onResult: (email: string, result: TestResults[string]) => void }
 
 const pageSize = 25
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -21,7 +22,7 @@ export function SendStage({ draft, settings, onPrepare, onEdit, onAdvance }: Pro
   const [mode, setMode] = useState<Audience['mode']>('all_active')
   const [activeCount, setActiveCount] = useState<number | null>(null)
   const [selected, setSelected] = useState<Record<string, Subscriber>>({})
-  const [pages, setPages] = useState<{ regular: ApiPage<Subscriber>; premium: ApiPage<Subscriber> } | null>(null)
+  const [pages, setPages] = useState<ApiPage<Subscriber> | null>(null)
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
@@ -32,6 +33,17 @@ export function SendStage({ draft, settings, onPrepare, onEdit, onAdvance }: Pro
   const [listError, setListError] = useState('')
   const [preparing, setPreparing] = useState(false)
   const [preparationError, setPreparationError] = useState('')
+  const testStorageKey = `cafezinho:test-results:${draft.id}`
+  const [testResults, setTestResults] = useState<TestResults>(() => {
+    const saved = JSON.parse(localStorage.getItem(testStorageKey) || '{}') as TestResults
+    return Object.fromEntries(Object.entries(saved).map(([email, result]) => [email, result.state === 'sending' ? { state: 'uncertain', message: 'Sessão interrompida. Consulte o histórico antes de repetir.' } : result]))
+  })
+  const latestTestResults = useRef(testResults)
+  const recordTestResult = (email: string, result: TestResults[string]) => {
+    const next = { ...latestTestResults.current, [email]: result }
+    localStorage.setItem(testStorageKey, JSON.stringify(next))
+    latestTestResults.current = next; setTestResults(next)
+  }
   const [testOpen, setTestOpen] = useState(false)
 
   useEffect(() => {
@@ -44,8 +56,8 @@ export function SendStage({ draft, settings, onPrepare, onEdit, onAdvance }: Pro
     // Loading state belongs to the external subscriber request.
     // oxlint-disable-next-line react/set-state-in-effect
     setCountLoading(true)
-    void Promise.all([api.subscribers(1, '', 'regular'), api.subscribers(1, '', 'premium')])
-      .then(([regular, premium]) => { if (active) { setActiveCount((regular.count || 0) + (premium.count || 0)); setCountError('') } })
+    void api.subscribers(1, '', 'active')
+      .then(data => { if (active) { setActiveCount(data.count); setCountError('') } })
       .catch((cause: unknown) => { if (active) setCountError(cause instanceof Error ? cause.message : 'Não foi possível consultar os assinantes.') })
       .finally(() => { if (active) setCountLoading(false) })
     return () => { active = false }
@@ -57,20 +69,20 @@ export function SendStage({ draft, settings, onPrepare, onEdit, onAdvance }: Pro
     // Loading state belongs to the external subscriber request.
     // oxlint-disable-next-line react/set-state-in-effect
     setListLoading(true)
-    void Promise.all([api.subscribers(page, search, 'regular'), api.subscribers(page, search, 'premium')])
-      .then(([regular, premium]) => { if (active) { setPages({ regular, premium }); setListError('') } })
+    void api.subscribers(page, search, 'active')
+      .then(data => { if (active) { setPages(data); setListError('') } })
       .catch((cause: unknown) => { if (active) setListError(cause instanceof Error ? cause.message : 'Não foi possível carregar os contatos ativos.') })
       .finally(() => { if (active) setListLoading(false) })
     return () => { active = false }
   }, [mode, page, search])
 
   const contacts = useMemo(() => {
-    const rows = [...(pages?.regular.results || []), ...(pages?.premium.results || [])]
+    const rows = pages?.results || []
     return rows.filter((contact, index) => rows.findIndex(item => item.id === contact.id) === index)
   }, [pages])
   const selectedRows = useMemo(() => Object.values(selected).sort((a, b) => a.email_address.localeCompare(b.email_address)), [selected])
   const count = mode === 'all_active' ? activeCount || 0 : selectedRows.length
-  const totalPages = Math.max(1, Math.ceil(Math.max(pages?.regular.count || 0, pages?.premium.count || 0) / pageSize))
+  const totalPages = Math.max(1, Math.ceil((pages?.count || 0) / pageSize))
   const error = mode === 'selected' ? listError : countError
   const technicalChecks = {
     audience: !loading && !error && count > 0,
@@ -96,7 +108,7 @@ export function SendStage({ draft, settings, onPrepare, onEdit, onAdvance }: Pro
       <ChecklistCard title="Destinatários" ready={technicalChecks.audience} onEdit={() => onEdit('audience')}>
         <fieldset className="send-audience" disabled={loading || preparing}>
           <legend>Escolha a audiência</legend>
-          <label className={mode === 'all_active' ? 'is-selected' : ''}><input type="radio" name={`send-audience-${draft.id}`} checked={mode === 'all_active'} onChange={() => setMode('all_active')} /><span><strong>Todos os assinantes</strong><small>Ativos e elegíveis</small></span><b>{activeCount ?? '—'}</b></label>
+          <label className={mode === 'all_active' ? 'is-selected' : ''}><input type="radio" name={`send-audience-${draft.id}`} checked={mode === 'all_active'} onChange={() => setMode('all_active')} /><span><strong>Todos os assinantes</strong><small>Ativos · contagem estimada</small></span><b>{activeCount ?? '—'}</b></label>
           <label className={mode === 'selected' ? 'is-selected' : ''}><input type="radio" name={`send-audience-${draft.id}`} checked={mode === 'selected'} onChange={() => { setListLoading(true); setMode('selected') }} /><span><strong>Escolher contatos</strong><small>Seleção individual</small></span><b>{selectedRows.length}</b></label>
         </fieldset>
         {mode === 'selected' && <div className="send-contact-picker"><Field label="Buscar contatos ativos"><input type="search" value={searchInput} onChange={event => setSearchInput(event.target.value)} placeholder="Nome ou e-mail" /></Field><div className="send-contact-list">{contacts.map(contact => <label key={contact.id}><input type="checkbox" checked={Boolean(selected[contact.id])} onChange={() => toggle(contact)} /><span>{typeof contact.metadata?.name === 'string' ? contact.metadata.name : contact.email_address}<small>{contact.email_address}</small></span></label>)}{!contacts.length && <p>Nenhum contato ativo nesta página.</p>}</div><div className="send-pagination"><span>Página {page} de {totalPages}</span><span><button type="button" disabled={page <= 1} onClick={() => setPage(value => value - 1)}>Anterior</button><button type="button" disabled={page >= totalPages} onClick={() => setPage(value => value + 1)}>Próxima</button></span></div>{selectedRows.length > 0 && <div className="send-selected"><strong>Selecionados ({selectedRows.length}/500)</strong>{selectedRows.map(contact => <span key={contact.id}>{contact.email_address}</span>)}</div>}</div>}
@@ -115,7 +127,7 @@ export function SendStage({ draft, settings, onPrepare, onEdit, onAdvance }: Pro
     </div>
     {preparationError && <ErrorState message={preparationError} />}
     {technicalMessage && !loading && <ErrorState message={technicalMessage} />}
-    {testOpen && <TestEmailDialog onPrepare={onPrepare} onClose={() => setTestOpen(false)} />}
+    {testOpen && <TestEmailDialog results={testResults} onResult={recordTestResult} onPrepare={onPrepare} onClose={() => setTestOpen(false)} />}
   </section>
 }
 
@@ -127,28 +139,21 @@ function ChecklistCard({ title, ready, onEdit, children }: { title: string; read
   return <article className={`send-check-card${ready ? ' is-checked' : ''}`}><div className="send-check-card-heading"><span className={`send-check-indicator${ready ? ' is-ready' : ''}`} role="img" aria-label={`${title}: ${ready ? 'pronto' : 'pendente'}`}>{ready ? <CheckCircle2 size={20} /> : <Info size={20} />}</span><div><h2>{title}</h2><div>{children}</div></div>{onEdit && <Button size="sm" variant="outline" onClick={onEdit}>Editar</Button>}</div></article>
 }
 
-function TestEmailDialog({ onPrepare, onClose }: TestDialogProps) {
-  const [value, setValue] = useState('')
+function TestEmailDialog({ onPrepare, onClose, results, onResult }: TestDialogProps) {
+  const [storageError, setStorageError] = useState('')
+  const [value, setValue] = useState(() => Object.keys(results).join(', '))
   const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState('')
-  const [sent, setSent] = useState(false)
   const emails = value.split(/[;,\n]/).map(email => email.trim().toLowerCase()).filter(Boolean)
   const valid = emails.length > 0 && emails.length <= 30 && emails.every(email => emailPattern.test(email)) && new Set(emails).size === emails.length
+  const retryable = emails.filter(email => !results[email] || ['rejected', 'not_sent'].includes(results[email].state))
+  const labels = { accepted: 'Aceito pela Buttondown', rejected: 'Não enviado — recusado pelo provedor', not_sent: 'Não enviado — falha na preparação', uncertain: 'Resultado incerto — repetição bloqueada', sending: 'Enviando…' }
   const submit = async () => {
-    if (!valid || busy) return
-    setBusy(true); setMessage('')
-    try {
-      const latest = await onPrepare()
-      if (!latest.buttondownId || !latest.cloudRevision) throw new Error('Sincronize a edição antes de enviar o teste.')
-      for (const recipient of emails) {
-        const prepared = await api.editorialTest({ draftId: latest.id, cloudRevision: latest.cloudRevision, recipient })
-        if (!prepared.attemptId) throw new Error(`Não foi possível preparar o teste para ${recipient}.`)
-        await api.editorialTest({ draftId: latest.id, cloudRevision: latest.cloudRevision, recipient, attemptId: prepared.attemptId, confirm: true })
-      }
-      setSent(true); setMessage(`Teste enviado para ${emails.length} ${emails.length === 1 ? 'endereço' : 'endereços'}.`)
-    } catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Não foi possível enviar o teste.') }
+    if (!valid || busy || !retryable.length) return
+    setBusy(true); setStorageError('')
+    try { await sendTestBatch(emails, results, onPrepare, onResult) }
+    catch { setStorageError('Não foi possível registrar o resultado neste navegador. Consulte o histórico antes de repetir.') }
     finally { setBusy(false) }
   }
-  return <div className="send-dialog-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !busy) onClose() }}><section className="send-dialog" role="dialog" aria-modal="true" aria-labelledby="send-test-title"><button className="send-dialog-close" type="button" aria-label="Fechar" onClick={onClose} disabled={busy}><X size={22} /></button><p className="eyebrow">HOMOLOGAÇÃO INDIVIDUAL</p><h2 id="send-test-title">Envio de email de teste</h2><Field label="E-mail para envio do teste" hint="Insira até 30 endereços diferentes separados por vírgula."><textarea autoFocus value={value} onChange={event => setValue(event.target.value)} placeholder="email@email.com.br" rows={3} /></Field>{value && !valid && <p className="send-dialog-error" role="alert">Informe até 30 e-mails válidos e sem repetição.</p>}{message && <p className={`send-dialog-message${sent ? ' is-success' : ''}`} role="status">{sent ? <Check size={16} /> : <Info size={16} />}{message}</p>}<div className="send-dialog-actions"><Button variant="outline" onClick={onClose} disabled={busy}>Cancelar</Button><Button icon={<Send size={15} />} onClick={() => void submit()} disabled={!valid || busy}>{busy ? 'Enviando…' : 'Enviar o teste'}</Button></div></section></div>
+  return <div className="send-dialog-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !busy) onClose() }}><section className="send-dialog" role="dialog" aria-modal="true" aria-labelledby="send-test-title"><button className="send-dialog-close" type="button" aria-label="Fechar" onClick={onClose} disabled={busy}><X size={22} /></button><p className="eyebrow">HOMOLOGAÇÃO INDIVIDUAL</p><h2 id="send-test-title">Envio de email de teste</h2><Field label="E-mail para envio do teste" hint="Insira até 30 endereços diferentes separados por vírgula."><textarea aria-label="E-mail para envio do teste" autoFocus disabled={busy} value={value} onChange={event => setValue(event.target.value)} placeholder="email@email.com.br" rows={3} /></Field>{value && !valid && <p className="send-dialog-error" role="alert">Informe até 30 e-mails válidos e sem repetição.</p>}{storageError && <p role="alert">{storageError}</p>}{Object.keys(results).length > 0 && <div aria-live="polite"><p>Resultado por destinatário. Aceitos e resultados incertos não serão repetidos.</p>{(['accepted', 'not_sent', 'rejected', 'uncertain', 'sending'] as const).map(state => { const entries = Object.entries(results).filter(([, result]) => result.state === state); return entries.length ? <section key={state}><h3>{({ accepted: 'Aceitos', not_sent: 'Não enviados', rejected: 'Recusados', uncertain: 'Resultados incertos', sending: 'Em andamento' })[state]}</h3><ul>{entries.map(([email, result]) => <li key={email}><strong>{email}</strong>: {labels[result.state]}{result.message && <small> · {result.message}</small>}</li>)}</ul></section> : null })}</div>}<div className="send-dialog-actions"><Button variant="outline" onClick={onClose} disabled={busy}>Cancelar</Button><Button icon={<Send size={15} />} onClick={() => void submit()} disabled={!valid || busy || !retryable.length}>{busy ? 'Enviando…' : Object.keys(results).length ? 'Repetir somente não enviados' : 'Enviar o teste'}</Button></div></section></div>
 }
 

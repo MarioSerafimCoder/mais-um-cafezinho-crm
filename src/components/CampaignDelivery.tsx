@@ -5,7 +5,7 @@ import type { ApiPage, DraftRecord, PreparedCampaignDelivery, Subscriber } from 
 import { Button } from './ui'
 
 const pageSize = 25
-type ActivePages = { regular: ApiPage<Subscriber>; premium: ApiPage<Subscriber> }
+type ActivePages = ApiPage<Subscriber>
 type Prepared = PreparedCampaignDelivery & { draftId: string; preparationKey: string }
 
 function preparationKey(draft: DraftRecord, mode: 'all_active' | 'selected', activeCount: number | null, selectedRows: Subscriber[]) {
@@ -65,19 +65,19 @@ export function CampaignDelivery({ draft, onPrepare }: { draft: DraftRecord; onP
     // oxlint-disable-next-line react/set-state-in-effect
     setLoadingContacts(true)
     setPages(null)
-    void Promise.all([api.subscribers(page, search, 'regular'), api.subscribers(page, search, 'premium')])
-      .then(([regular, premium]) => { if (active) setPages({ regular, premium }) })
+    void api.subscribers(page, search, 'active')
+      .then(data => { if (active) setPages(data) })
       .catch((cause: unknown) => { if (active) setError(cause instanceof Error ? cause.message : 'Não foi possível carregar os contatos ativos.') })
       .finally(() => { if (active) setLoadingContacts(false) })
     return () => { active = false }
   }, [enabled, mode, page, search])
 
   const contacts = useMemo(() => {
-    const rows = [...(pages?.regular.results || []), ...(pages?.premium.results || [])]
+    const rows = pages?.results || []
     return rows.filter((contact, index) => rows.findIndex((item) => item.id === contact.id) === index)
   }, [pages])
   const selectedRows = useMemo(() => Object.values(selected).sort((a, b) => a.email_address.localeCompare(b.email_address)), [selected])
-  const totalPages = Math.max(1, Math.ceil(Math.max(pages?.regular.count || 0, pages?.premium.count || 0) / pageSize))
+  const totalPages = Math.max(1, Math.ceil((pages?.count || 0) / pageSize))
   const current = Boolean(draft.buttondownId && draft.cloudRevision
     && Number.isSafeInteger(draft.revision)
     && draft.revision === draft.syncedRevision
@@ -188,7 +188,7 @@ export function CampaignDelivery({ draft, onPrepare }: { draft: DraftRecord; onP
         <div className="delivery-contact-pagination"><span>Página {page} de {totalPages}</span><div><button type="button" disabled={page <= 1 || loadingContacts || deliveryAccepted || deliveryUncertain} onClick={() => setPage((value) => Math.max(1, value - 1))}>Anterior</button><button type="button" disabled={page >= totalPages || loadingContacts || deliveryAccepted || deliveryUncertain} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Próxima</button></div></div>
         {selectedRows.length > 0 && <div className="delivery-selected-list"><strong>Selecionados ({selectedRows.length}/{selectedLimit})</strong>{selectedRows.map((contact) => <span key={contact.id}>{contact.email_address}</span>)}</div>}
       </div>}
-      {preparedSummary ? <div className="campaign-delivery-preview" aria-label="Dados confirmados pelo servidor"><span className="inspector-label">PREPARAÇÃO CONFIRMADA</span><p><strong>{preparedSummary.subject}</strong></p><p>{preparedSummary.recipientCount} {preparedSummary.recipientCount === 1 ? 'destinatário' : 'destinatários'} · {preparedSummary.audienceMode === 'all_active' ? 'Todos os assinantes ativos' : 'Contatos selecionados'}</p>{preparedSummary.selectedRecipients?.length ? <ul>{preparedSummary.selectedRecipients.map((recipient) => <li key={recipient.id}>{recipient.email_address}</li>)}</ul> : null}<p>Preparação válida até {expiryLabel(preparedSummary.expiresAt)}.</p><p>A campanha será enviada imediatamente após a confirmação final.</p></div> : <div className="delivery-summary"><span className="inspector-label">PREPARAR ENVIO</span><p><strong>{draft.subject}</strong></p><p>Confira os dados reais da audiência antes da confirmação final.</p></div>}
+      {preparedSummary ? <div className="campaign-delivery-preview" aria-label="Dados confirmados pelo servidor"><span className="inspector-label">PREPARAÇÃO CONFIRMADA</span><p><strong>{preparedSummary.subject}</strong></p><p>Estimativa: {preparedSummary.recipientCount} {preparedSummary.recipientCount === 1 ? 'destinatário' : 'destinatários'} · {preparedSummary.audienceMode === 'all_active' ? 'Todos os assinantes ativos' : 'Contatos selecionados'}</p>{preparedSummary.selectedRecipients?.length ? <ul>{preparedSummary.selectedRecipients.map((recipient) => <li key={recipient.id}>{recipient.email_address}</li>)}</ul> : null}<p>Preparação válida até {expiryLabel(preparedSummary.expiresAt)}.</p><p>A campanha será enviada imediatamente após a confirmação final.</p></div> : <div className="delivery-summary"><span className="inspector-label">PREPARAR ENVIO</span><p><strong>{draft.subject}</strong></p><p>Confira a estimativa de audiência antes da confirmação final.</p></div>}
       {!deliveryAccepted && !deliveryUncertain && !preparedSummary && <Button className="campaign-prepare-button" icon={<Send size={16} />} disabled={busy || (!current && !onPrepare) || audienceCount < 1} onClick={() => void prepare()}>{busy ? 'Sincronizando e preparando…' : 'Preparar envio'}</Button>}
       {!deliveryAccepted && !deliveryUncertain && preparedSummary && phase === 'ready' && <Button className="campaign-prepare-button" icon={<Send size={16} />} disabled={busy} onClick={() => void confirm()}>Confirmar e enviar campanha</Button>}
       {phase === 'preparing' && <Button className="campaign-prepare-button" disabled>Preparando envio…</Button>}

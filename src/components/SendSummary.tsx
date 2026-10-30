@@ -34,8 +34,8 @@ export function SendSummary({ draft, prepared, onBack }: Props) {
   }
   return <section className="send-summary" aria-label="Resumo do envio">
     <div className="send-summary-heading"><div><p className="eyebrow">ETAPA 04 · RESUMO E ENVIO</p><h1>Resumo e envio</h1><p>Confira os dados da campanha preparada antes de confirmar o envio.</p></div></div>
-    <div className="send-summary-layout"><div className="send-summary-card"><h2>Confirme o envio</h2><p>A campanha será enviada imediatamente após sua confirmação.</p>
-      <div className="send-server-summary" aria-label="Dados confirmados pelo servidor"><dl><div><dt>Assunto</dt><dd>{prepared.subject}</dd></div><div><dt>Audiência</dt><dd>{prepared.audienceMode === 'all_active' ? 'Todos os assinantes ativos' : 'Contatos selecionados'}</dd></div><div><dt>Destinatários</dt><dd>{prepared.recipientCount}</dd></div></dl>
+    <div className="send-summary-layout"><div className="send-summary-card"><h2>Confirme o envio</h2><p>A campanha será enviada imediatamente após sua confirmação. A contagem é estimada; a Buttondown aplica sua elegibilidade e eventuais supressões no envio.</p>
+      <div className="send-server-summary" aria-label="Dados confirmados pelo servidor"><dl><div><dt>Assunto</dt><dd>{prepared.subject}</dd></div><div><dt>Audiência</dt><dd>{prepared.audienceMode === 'all_active' ? 'Todos os assinantes ativos' : 'Contatos selecionados'}</dd></div><div><dt>Destinatários estimados</dt><dd>{prepared.recipientCount}</dd></div></dl>
       {prepared.selectedRecipients?.length ? <details><summary>Ver destinatários selecionados</summary><ul>{prepared.selectedRecipients.map(recipient => <li key={recipient.id}>{recipient.email_address}</li>)}</ul></details> : null}
       <p className="send-preparation-expiry">Preparação válida até {new Date(prepared.expiresAt).toLocaleString('pt-BR')}.</p></div>
       {state === 'ready' && (changed || expired) && <p role="alert" className="send-summary-message is-error">{changed ? 'Os dados da edição mudaram.' : 'A preparação expirou.'} Volte à etapa 3 para preparar novamente.</p>}

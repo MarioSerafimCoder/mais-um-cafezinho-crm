@@ -1,3 +1,5 @@
+import { activeSubscriberQuery } from '../../shared/audience'
+import { subscriberPage } from '../_subscriber-audience'
 import { buttondown, errorResponse, json, pageResult } from '../_utils'
 import type { AppEnv } from '../_utils'
 
@@ -67,14 +69,14 @@ export const onRequestGet = async ({ request, env }: Context) => {
     if (cache && cacheAge <= cacheTtlMs) return json(responseSummary(cache.summary, [], [], { cached: true, cacheAgeSeconds: Math.floor(cacheAge / 1000) }))
 
     const paths = [
-      '/subscribers?type=regular&page=1',
-      `/subscribers?type=regular&date__start=${currentMonthInSaoPaulo()}&page=1`,
+      `/subscribers?${activeSubscriberQuery({ page: '1' })}`,
+      `/subscribers?${activeSubscriberQuery({ page: '1', date__start: currentMonthInSaoPaulo() })}`,
       '/emails?status=sent&ordering=-creation_date&page=1',
       '/emails?status=draft&ordering=-creation_date&page=1',
       '/emails?status=scheduled&ordering=publish_date&page=1',
       '/emails?ordering=-creation_date&page=1',
     ] as const
-    const settled = await Promise.allSettled(paths.map(path => buttondown({ request, env }, path).then(value => pageResult(value) as ListResult)))
+    const settled = await Promise.allSettled(paths.map(path => path.startsWith('/subscribers?') ? subscriberPage({ request, env }, new URLSearchParams(path.split('?')[1])) as Promise<ListResult> : buttondown({ request, env }, path).then(value => pageResult(value) as ListResult)))
     const failures = settled.filter(item => item.status === 'rejected')
     if (failures.length === settled.length) {
       const authenticationFailure = failures.find(item => isAuthFailure(item.reason))

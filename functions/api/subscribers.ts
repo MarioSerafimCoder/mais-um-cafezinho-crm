@@ -1,3 +1,4 @@
+import { activeSubscriberQuery, isActiveSubscriberType } from '../../shared/audience'
 import { buttondown, errorResponse, json, safePage, pageResult, parseJson } from '../_utils'
 import type { AppEnv } from '../_utils'
 
@@ -10,10 +11,10 @@ export const onRequestGet = async ({ request, env }: Context) => {
   const type = incoming.searchParams.get('type')
   if (!page) return json({ error: 'Página inválida.' }, 400)
   if (emailAddress.length > 120) return json({ error: 'A busca pode ter até 120 caracteres.' }, 400)
-  if (type && !['regular', 'premium'].includes(type)) return json({ error: 'Status de assinante inválido.' }, 400)
-  const params = new URLSearchParams({ page: String(page), ordering: '-creation_date' })
+  if (type && type !== 'active' && !isActiveSubscriberType(type)) return json({ error: 'Status de assinante inválido.' }, 400)
+  const params = type === 'active' ? activeSubscriberQuery({ page: String(page), ordering: '-creation_date' }) : new URLSearchParams({ page: String(page), ordering: '-creation_date' })
   if (emailAddress) params.set('email_address', emailAddress)
-  if (type) params.set('type', type)
+  if (type && type !== 'active') params.set('type', type)
   try {
     const upstream = await buttondown({ request, env }, `/subscribers?${params}`) as { results?: unknown[]; count?: number; next?: string | null; previous?: string | null }
     return json(pageResult(upstream))
@@ -48,7 +49,7 @@ export const onRequestPost = async ({ request, env }: Context) => {
         }
         return json({ id: activated.id, email_address: activated.email_address, type: 'regular', creation_date: typeof activated.creation_date === 'string' ? activated.creation_date : null, activatedExisting: true }, 200)
       }
-      if (existing.type === 'regular' || existing.type === 'premium') {
+      if (typeof existing.type === 'string' && isActiveSubscriberType(existing.type)) {
         return json({ id: typeof existing.id === 'string' ? existing.id : '', email_address: emailAddress, type: existing.type, alreadyActive: true }, 200)
       }
       const statusLabel = typeof existing.type === 'string' ? existing.type : 'desconhecido'

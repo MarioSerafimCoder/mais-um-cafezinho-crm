@@ -1,3 +1,5 @@
+import { activeAudienceFilters } from '../../shared/audience'
+import { countActiveSubscribers as countActive, validateSelectedSubscribers as validateSelected } from '../_subscriber-audience'
 import { selectedAudienceFilters } from '../_campaign-audience'
 import { database, getDocument } from '../_documents'
 import { buttondown, errorResponse, json, matchesButtondownTemplate, parseJson, validId, type AppEnv } from '../_utils'
@@ -5,14 +7,12 @@ import { buttondown, errorResponse, json, matchesButtondownTemplate, parseJson, 
 type Context = { request: Request; env: AppEnv }
 type Audience = { mode: 'all_active' } | { mode: 'selected'; subscriberIds: string[] }
 type RemoteCampaign = { id: string; status: string; subject: string; body: string; description?: string; template?: string | null; email_type?: string; filters?: unknown }
-type RemoteSubscriber = { id: string; email_address: string; type: string; metadata?: Record<string, unknown> }
 type SelectedRecipient = { id: string; email_address: string }
 type Attempt = {
   id: string; draft_id: string; cloud_revision: number; campaign_id: string; audience_mode: 'all_active' | 'selected';
   subscriber_ids: string | null; audience_count: number; campaign_hash: string; subject: string; created_at: string; state: string
 }
 
-const activeTypes = ['regular', 'premium'] as const
 const selectedLimit = 500
 const preparationLifetimeMs = 10 * 60 * 1000
 
@@ -29,34 +29,6 @@ function hasFilters(value: unknown) {
   const filters = value as Record<string, unknown>
   if (!Array.isArray(filters.filters) || !Array.isArray(filters.groups)) return true
   return filters.filters.length > 0 || filters.groups.length > 0
-}
-function activeCount(value: unknown) {
-  if (!value || typeof value !== 'object') throw new Error('INVALID_SUBSCRIBER_RESPONSE')
-  const count = (value as { count?: unknown }).count
-  if (!Number.isSafeInteger(count) || Number(count) < 0) throw new Error('INVALID_SUBSCRIBER_COUNT')
-  return Number(count)
-}
-async function countActive(context: Context) {
-  const counts = await Promise.all(activeTypes.map(async (type) => {
-    const query = new URLSearchParams({ type, page: '1' })
-    const result = await buttondown(context, `/subscribers?${query}`)
-    return activeCount(result)
-  }))
-  return counts.reduce((total, count) => total + count, 0)
-}
-async function getSubscriber(context: Context, id: string) {
-  return await buttondown(context, `/subscribers/${encodeURIComponent(id)}`) as RemoteSubscriber
-}
-async function validateSelected(context: Context, ids: string[]) {
-  const subscribers: RemoteSubscriber[] = []
-  for (let index = 0; index < ids.length; index += 8) {
-    const batch = await Promise.all(ids.slice(index, index + 8).map((id) => getSubscriber(context, id)))
-    if (batch.some((subscriber, offset) => subscriber.id !== ids[index + offset] || !activeTypes.includes(subscriber.type as typeof activeTypes[number]) || typeof subscriber.email_address !== 'string')) {
-      throw json({ error: 'Um contato selecionado não está mais ativo. Atualize a lista antes de preparar o envio.' }, 409)
-    }
-    subscribers.push(...batch)
-  }
-  return subscribers
 }
 async function currentDraft(context: Context, draftId: string, cloudRevision: number) {
   const draft = await getDocument(context.env, 'draft', draftId)
@@ -130,14 +102,14 @@ export async function onRequestPost(context: Context) {
       const campaignHash = await campaignFingerprint(campaign)
       if (existing && existing.state !== 'prepared') return json({ error: existing.state === 'attempted' ? 'O resultado do envio anterior ainda não foi confirmado. Consulte o histórico antes de reenviar.' : 'Esta campanha já foi enviada.', state: existing.state }, 409)
       if (existing && existing.draft_id === draft.id && existing.cloud_revision === draft.cloudRevision && existing.campaign_hash === campaignHash && existing.audience_mode === audience.mode && existing.subscriber_ids === subscriberIds && existing.audience_count === recipientCount) {
-        return json({ attemptId: existing.id, audienceMode: audience.mode, recipientCount, cloudRevision: draft.cloudRevision, subject: campaign.subject, selectedRecipients, expiresAt: new Date(Date.parse(existing.created_at) + preparationLifetimeMs).toISOString() })
+        return json({ attemptId: existing.id, audienceMode: audience.mode, recipientCount, countIsEstimate: true, cloudRevision: draft.cloudRevision, subject: campaign.subject, selectedRecipients, expiresAt: new Date(Date.parse(existing.created_at) + preparationLifetimeMs).toISOString() })
       }
       if (existing) await db.prepare("UPDATE campaign_send_attempts SET state = 'cancelled' WHERE id = ? AND state = 'prepared'").bind(existing.id).run()
       const attemptId = crypto.randomUUID()
       const inserted = await db.prepare('INSERT OR IGNORE INTO campaign_send_attempts (id, draft_id, cloud_revision, campaign_id, audience_mode, subscriber_ids, audience_count, campaign_hash, subject, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
         .bind(attemptId, draft.id, draft.cloudRevision, draft.buttondownId, audience.mode, subscriberIds, recipientCount, campaignHash, campaign.subject, now).run()
       if (!inserted.meta.changes) return json({ error: 'Esta campanha acabou de ser preparada em outra sessão. Consulte o estado antes de repetir.' }, 409)
-      return json({ attemptId, audienceMode: audience.mode, recipientCount, cloudRevision: draft.cloudRevision, subject: campaign.subject, selectedRecipients, expiresAt: new Date(Date.now() + preparationLifetimeMs).toISOString() })
+      return json({ attemptId, audienceMode: audience.mode, recipientCount, countIsEstimate: true, cloudRevision: draft.cloudRevision, subject: campaign.subject, selectedRecipients, expiresAt: new Date(Date.now() + preparationLifetimeMs).toISOString() })
     }
 
     if (input.action === 'cancel') {
@@ -171,7 +143,7 @@ export async function onRequestPost(context: Context) {
         }
       })()
       const { draft, subscribers } = preflight
-      const publication = attempt.audience_mode === 'selected' ? { filters: selectedAudienceFilters(subscribers) } : {}
+      const publication = attempt.audience_mode === 'selected' ? { filters: selectedAudienceFilters(subscribers) } : { filters: activeAudienceFilters() }
 
       const claimed = await db.prepare("UPDATE campaign_send_attempts SET state = 'attempted' WHERE id = ? AND state = 'prepared' AND EXISTS (SELECT 1 FROM editorial_documents WHERE kind = 'draft' AND id = ? AND version = ?)")
         .bind(attempt.id, draft.id, draft.cloudRevision).run()

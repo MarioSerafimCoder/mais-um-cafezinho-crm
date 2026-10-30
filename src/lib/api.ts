@@ -2,11 +2,13 @@ import type { ApiPage, Campaign, CampaignDeliveryStatus, DashboardSummary, Draft
 
 export class ApiError extends Error {
   readonly status: number
+  readonly providerState?: string
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, providerState?: string) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.providerState = providerState
   }
 }
 
@@ -15,7 +17,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try { response = await fetch(path, { ...init, headers: { ...(init?.headers || {}) } }) }
   catch { throw new ApiError('Sem conexão com o servidor. Os rascunhos deste navegador continuam disponíveis.', 0) }
   const payload = await response.json().catch(() => null)
-  if (!response.ok) throw new ApiError(payload?.error || `Falha na solicitação (${response.status}).`, response.status)
+  if (!response.ok) throw new ApiError(payload?.error || `Falha na solicitação (${response.status}).`, response.status, payload?.state)
   if (!payload || typeof payload !== 'object') throw new ApiError('A resposta da API está vazia ou inválida.', response.status)
   return payload as T
 }
@@ -34,7 +36,7 @@ export const api = {
   saveCloudDraft: (draft: DraftRecord) => request<DraftRecord>(`/api/drafts/${encodeURIComponent(draft.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draft) }),
   cloudSettings: () => request<NewsletterSettings & { cloudRevision: number }>('/api/settings'),
   saveCloudSettings: (settings: NewsletterSettings & { cloudRevision?: number }) => request<NewsletterSettings & { cloudRevision: number }>('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) }),
-  subscribers: (page: number, search: string, type?: 'regular' | 'premium') => {
+  subscribers: (page: number, search: string, type?: 'regular' | 'premium' | 'active') => {
     const params = new URLSearchParams({ page: String(page) })
     if (search.trim()) params.set('email_address', search.trim())
     if (type) params.set('type', type)
