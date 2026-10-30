@@ -2,7 +2,7 @@
 
 ## Estado desta implementação
 
-O editor permite escolher contatos ativos específicos ou todos os assinantes ativos. A interface prepara uma prévia que mostra o assunto, a revisão D1, a contagem e os endereços selecionados. O envio exige uma confirmação final explícita.
+O editor permite escolher contatos ativos específicos ou todos os assinantes ativos. Na etapa 3 (Preparação), o botão “Preparar envio e ver resumo” sincroniza a edição e valida a audiência no servidor. Se houver bloqueio ou falha, a edição permanece nessa etapa com o motivo. A etapa 4 (Resumo e envio) abre apenas após a preparação e mostra o assunto, a contagem e os endereços selecionados. O envio real exige o clique separado em “Confirmar e enviar campanha”. Alterações na edição ou expiração exigem voltar à etapa 3 para preparar novamente.
 
 O recurso está fechado por padrão no servidor (`CAMPAIGN_SENDING_ENABLED` ausente ou diferente de `true`). Esta alteração de código não aplicou migração, não alterou secrets ou permissões da Buttondown, não publicou o CRM e não enviou e-mails. A configuração de produção continua conforme o guia operacional, com permissão de envio desativada.
 

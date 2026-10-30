@@ -1,3 +1,4 @@
+import { deliveryDraftKey, type PreparedDelivery } from '../lib/delivery-preparation'
 import { campaignHash } from '../../shared/campaign-fingerprint'
 import { useEffect, useReducer, useRef, useState } from 'react'
 import { Link, useBlocker, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -37,8 +38,7 @@ function Workspace({ routeId, templateId, copy }: { routeId: string; templateId:
   const [initial, setInitial] = useState<GrapesDocument | null>(null); const [integration, setIntegration] = useState<IntegrationStatus | null>(null)
   const [error, setError] = useState(''); const [loadError, setLoadError] = useState(''); const [notice, setNotice] = useState('')
   const [stage, setStage] = useState<'edit' | 'preview' | 'send' | 'summary'>('edit'); const [preview, setPreview] = useState(''); const [previewDevice, setPreviewDevice] = useState('Desktop')
-  const [audience, setAudience] = useState<{ mode: 'all_active' } | { mode: 'selected'; subscriberIds: string[] } | null>(null)
-  const [audienceCount, setAudienceCount] = useState(0); const [audienceRecipients, setAudienceRecipients] = useState<import('../types').Subscriber[]>([])
+  const [preparedDelivery, setPreparedDelivery] = useState<PreparedDelivery | null>(null)
   const [settings] = useState(() => readSettings())
   const blocker = useBlocker(() => Boolean(session.current?.dirty || invalid.current))
   useEffect(() => {
@@ -146,6 +146,18 @@ function Workspace({ routeId, templateId, copy }: { routeId: string; templateId:
     if (!session.current) throw new Error('A edição ainda está carregando.')
     return structuredClone(session.current.value)
   }
+  const prepareDelivery = async (audience: { mode: 'all_active' } | { mode: 'selected'; subscriberIds: string[] }) => {
+    setPreparedDelivery(null)
+    const status = await api.campaignDeliveryStatus()
+    if (!status.enabled) throw new Error('O envio de campanhas está desativado neste ambiente. A preparação não está disponível.')
+    const latest = await prepareForExternalAction()
+    if (!latest.buttondownId || !latest.cloudRevision) throw new Error('Sincronize a edição antes de preparar o envio.')
+    const result = await api.campaignDelivery({ action: 'prepare', draftId: latest.id, cloudRevision: latest.cloudRevision, audience })
+    if (!result.attemptId || !Number.isSafeInteger(result.recipientCount) || Number(result.recipientCount) < 1 || result.cloudRevision !== latest.cloudRevision || !result.subject || result.audienceMode !== audience.mode || !result.expiresAt || !Number.isFinite(Date.parse(result.expiresAt)) || Date.parse(result.expiresAt) <= Date.now()) throw new Error('Não foi possível preparar o envio. Tente novamente.')
+    if (!session.current || deliveryDraftKey(session.current.value) !== deliveryDraftKey(latest)) throw new Error('A edição mudou durante a preparação. Prepare novamente.')
+    setPreparedDelivery({ ...result as import('../types').PreparedCampaignDelivery, draftId: latest.id, draftKey: deliveryDraftKey(latest) })
+    setStage('summary')
+  }
   const editFromSend = (target: 'subject' | 'content' | 'audience') => {
     if (target === 'subject') setStage('edit')
     else if (target === 'content') setStage('preview')
@@ -163,14 +175,15 @@ function Workspace({ routeId, templateId, copy }: { routeId: string; templateId:
   const current = currentSession; const draft = current.value; const busy = persistenceView?.busy || current.syncing
   return <div className={`grapes-page stage-${stage}`}>
     <div className="grapes-page-top"><Link className="back-link" to="/campaigns">← Edições</Link><span role="status">{persistenceView?.label || 'Abrindo canvas…'}</span></div>
-    <nav className="editor-stage-nav" aria-label="Etapas da campanha">{[['edit', '1 · Edição'], ['preview', '2 · Prévia'], ['send', '3 · Envio'], ['summary', '4 · Resumo']].map(([key, label], index) => <button type="button" key={key} className={stage === key ? 'is-active' : ''} disabled={key === 'summary' ? !audience : index > (['edit', 'preview', 'send', 'summary'] as const).indexOf(stage)} onClick={() => setStage(key as typeof stage)}>{label}</button>)}</nav>
+    <nav className="editor-stage-nav" aria-label="Etapas da campanha">{[['edit', '1 · Edição'], ['preview', '2 · Prévia'], ['send', '3 · Preparação'], ['summary', '4 · Resumo e envio']].map(([key, label], index) => <button type="button" key={key} className={stage === key ? 'is-active' : ''} disabled={key === 'summary' ? !preparedDelivery || preparedDelivery.draftKey !== deliveryDraftKey(draft) : index > (['edit', 'preview', 'send', 'summary'] as const).indexOf(stage)} onClick={() => setStage(key as typeof stage)}>{label}</button>)}</nav>
     {stage === 'edit' && <div className="grapes-page-heading"><div><p className="eyebrow">MAIS UM CAFEZINHO · ESTÚDIO EDITORIAL</p><input className="subject-input" aria-label="Assunto da newsletter" value={draft.subject} onChange={e => { current.edit({ subject: e.target.value }); queue.current?.schedule() }} /></div><Button onClick={openPreview}>Revisar edição</Button></div>}
     {stage === 'preview' && <div className="grapes-page-heading"><div><p className="eyebrow">ETAPA 02 · PRÉVIA</p><h1>Revise sua edição</h1></div><div className="stage-heading-actions"><Button variant="outline" onClick={() => setStage('edit')}>Voltar à edição</Button><Button onClick={() => setStage('send')}>Continuar para envio</Button></div></div>}
     <details className="grapes-edition-settings"><summary>Detalhes da edição e recuperação</summary><div className="grapes-edition-fields"><Field label="Texto de prévia"><input value={draft.description || ''} maxLength={200} onChange={e => { current.edit({ description: e.target.value }); queue.current?.schedule() }} /></Field><Field label="Data da edição"><input type="date" value={draft.editionDate || ''} onChange={e => { current.edit({ editionDate: e.target.value }); queue.current?.schedule() }} /></Field></div><div className="grapes-recovery-actions"><Button variant="outline" size="sm" disabled={busy || !integration?.connected} onClick={() => void action(async () => { capture(); await queue.current?.flush(true); setNotice('Rascunho sincronizado. Nenhum e-mail foi enviado.') })}>Sincronizar rascunho</Button><Button variant="quiet" size="sm" onClick={() => void action(() => { capture(); download(`cafezinho-${draft.id}.json`, JSON.stringify(current.value, null, 2)) })}>Exportar documento</Button><Button variant="quiet" size="sm" onClick={exportOriginal}>Exportar original</Button><Button variant="quiet" size="sm" onClick={() => void action(() => { capture(); if (isGrapesDocument(current.value.document)) download('newsletter.html', compileEmail(current.value.document), 'text/html') })}>Exportar HTML</Button></div></details>
     {error && <ErrorState message={error} />}{notice && <p className="success-message" role="status">{notice}</p>}
     <div hidden={stage !== 'edit'}><GrapesEditor document={initial} onReady={ready} onChange={changed} onError={message => { invalid.current = true; setError(message) }} /></div>
     {stage === 'preview' && <section className="grapes-preview"><div className="grapes-preview-heading"><div><p className="eyebrow">PRÉVIA DA EDIÇÃO</p><h2>{draft.subject}</h2></div><div>{['Desktop', 'Mobile'].map(name => <Button key={name} variant="outline" aria-pressed={name === previewDevice} onClick={() => setPreviewDevice(name)}>{name}</Button>)}</div></div><iframe style={{ width: previewDevice === 'Mobile' ? 375 : '100%' }} title="Prévia da edição" sandbox="" referrerPolicy="no-referrer" srcDoc={preview} /><p>Prévia do fragmento HTML sincronizado. A plataforma acrescenta o rodapé de descadastro.</p></section>}
-    {stage === 'send' && <SendStage draft={draft} settings={settings} onPrepare={prepareForExternalAction} onEdit={editFromSend} onAdvance={(nextAudience, count, recipients) => { setAudience(nextAudience); setAudienceCount(count); setAudienceRecipients(recipients); setStage('summary') }} />}
-    {stage === 'summary' && audience && <SendSummary draft={draft} audience={audience} count={audienceCount} recipients={audienceRecipients} onPrepare={prepareForExternalAction} onBack={() => setStage('send')} onTest={() => setStage('send')} />}
+    {stage === 'send' && <SendStage draft={draft} settings={settings} onPrepare={prepareForExternalAction} onEdit={editFromSend} onAdvance={prepareDelivery} />}
+    {stage === 'summary' && preparedDelivery && <SendSummary key={preparedDelivery.attemptId} draft={draft} prepared={preparedDelivery} onBack={() => { setPreparedDelivery(null); setStage('send') }} />}
+
   </div>
 }

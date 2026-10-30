@@ -10,7 +10,7 @@ type Props = {
   settings: NewsletterSettings
   onPrepare: () => Promise<DraftRecord>
   onEdit: (target: 'subject' | 'content' | 'audience') => void
-  onAdvance: (audience: Audience, count: number, recipients: Subscriber[]) => void
+  onAdvance: (audience: Audience, count: number, recipients: Subscriber[]) => void | Promise<void>
 }
 type TestDialogProps = { onPrepare: () => Promise<DraftRecord>; onClose: () => void }
 
@@ -30,6 +30,8 @@ export function SendStage({ draft, settings, onPrepare, onEdit, onAdvance }: Pro
   const loading = mode === 'all_active' ? countLoading : listLoading
   const [countError, setCountError] = useState('')
   const [listError, setListError] = useState('')
+  const [preparing, setPreparing] = useState(false)
+  const [preparationError, setPreparationError] = useState('')
   const [testOpen, setTestOpen] = useState(false)
 
   useEffect(() => {
@@ -89,10 +91,10 @@ export function SendStage({ draft, settings, onPrepare, onEdit, onAdvance }: Pro
   const technicalMessage = loading ? '' : error || (!technicalChecks.audience ? 'Não há destinatários elegíveis para esta audiência.' : !technicalChecks.subject ? 'Informe um assunto com até 200 caracteres antes de avançar.' : !technicalChecks.content ? 'O documento da edição ainda não está disponível.' : senderConfigurationError ? 'O endereço de referência do remetente é inválido.' : '')
 
   return <section className="send-stage" aria-label="Etapa 3: envio">
-    <div className="send-stage-heading"><div><p className="eyebrow">ETAPA 03 · ENVIO</p><h1>Revise o envio</h1><p>Confira a audiência e os dados da edição antes de avançar para o resumo.</p></div><div className="send-stage-actions send-stage-actions-top"><Button variant="outline" onClick={() => onEdit('content')}>Voltar à prévia</Button><Button variant="outline" icon={<Mail size={16} />} onClick={() => setTestOpen(true)}>Enviar email de teste</Button><Button disabled={!allTechnicalChecksPassed} onClick={() => { if (allTechnicalChecksPassed) onAdvance(mode === 'all_active' ? { mode } : { mode, subscriberIds: selectedRows.map(contact => contact.id) }, count, selectedRows) }}>Avançar</Button></div></div>
+    <div className="send-stage-heading"><div><p className="eyebrow">ETAPA 03 · PREPARAÇÃO</p><h1>Prepare o envio</h1><p>Confira os dados e prepare a campanha. O envio real será confirmado na etapa 4.</p></div><div className="send-stage-actions send-stage-actions-top"><Button variant="outline" onClick={() => onEdit('content')}>Voltar à prévia</Button><Button variant="outline" icon={<Mail size={16} />} onClick={() => setTestOpen(true)}>Enviar email de teste</Button><Button disabled={!allTechnicalChecksPassed || preparing} onClick={() => { if (!allTechnicalChecksPassed || preparing) return; setPreparing(true); setPreparationError(''); void Promise.resolve().then(() => onAdvance(mode === 'all_active' ? { mode } : { mode, subscriberIds: selectedRows.map(contact => contact.id) }, count, selectedRows)).catch(cause => setPreparationError(cause instanceof Error ? cause.message : 'Não foi possível preparar o envio.')).finally(() => setPreparing(false)) }}>{preparing ? 'Preparando campanha…' : 'Preparar envio e ver resumo'}</Button></div></div>
     <div className="send-checklist">
       <ChecklistCard title="Destinatários" ready={technicalChecks.audience} onEdit={() => onEdit('audience')}>
-        <fieldset className="send-audience" disabled={loading}>
+        <fieldset className="send-audience" disabled={loading || preparing}>
           <legend>Escolha a audiência</legend>
           <label className={mode === 'all_active' ? 'is-selected' : ''}><input type="radio" name={`send-audience-${draft.id}`} checked={mode === 'all_active'} onChange={() => setMode('all_active')} /><span><strong>Todos os assinantes</strong><small>Ativos e elegíveis</small></span><b>{activeCount ?? '—'}</b></label>
           <label className={mode === 'selected' ? 'is-selected' : ''}><input type="radio" name={`send-audience-${draft.id}`} checked={mode === 'selected'} onChange={() => { setListLoading(true); setMode('selected') }} /><span><strong>Escolher contatos</strong><small>Seleção individual</small></span><b>{selectedRows.length}</b></label>
@@ -111,6 +113,7 @@ export function SendStage({ draft, settings, onPrepare, onEdit, onAdvance }: Pro
         <TechnicalStatus valid={technicalChecks.content}>{technicalChecks.content ? 'Documento carregado pelo sistema.' : 'Documento pendente.'}</TechnicalStatus>
       </ChecklistCard>
     </div>
+    {preparationError && <ErrorState message={preparationError} />}
     {technicalMessage && !loading && <ErrorState message={technicalMessage} />}
     {testOpen && <TestEmailDialog onPrepare={onPrepare} onClose={() => setTestOpen(false)} />}
   </section>
