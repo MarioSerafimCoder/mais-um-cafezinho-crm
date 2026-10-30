@@ -86,3 +86,5 @@ wrangler.toml        Configuração do Cloudflare Pages
 ```
 
 Editor atual: GrapesJS OSS + MJML. Consulte [migração, recuperação e limitações](docs/GRAPESJS-MIGRATION.md).
+
+Centralização e contraste: novos envios usam a moldura Modern da Buttondown; veja [design e homologação](docs/EMAIL-DESIGN.md).

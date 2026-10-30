@@ -35,7 +35,9 @@ describe('segurança do documento nativo e do fragmento', () => {
     const body = compileEmail(document)
     expect(body).toMatch(/max-width:\s*640px/)
     expect(body).toMatch(/margin:\s*0px? auto/)
-    expect(body).toContain('text-align:right;color:#123456')
+    const heading = new DOMParser().parseFromString(body, 'text/html').querySelector('h2')!
+    expect(heading.style.textAlign).toBe('right')
+    expect(heading.style.color).toBe('rgb(18, 52, 86)')
   })
   it('empilha coluna pixel legada para impedir overflow sem CSS de cabeçalho', () => {
     const document = htmlToDocument('<p>Texto</p>')
@@ -61,7 +63,9 @@ describe('segurança do documento nativo e do fragmento', () => {
   it('preserva estilos, listas numeradas e formatação inline', () => {
     const document = htmlToDocument('<h2 style="text-align:right;color:#123456">Título</h2><p><strong>Forte</strong> <em>Ênfase</em></p><ol start="3"><li>Terceiro</li></ol>')
     const html = compileEmail(document)
-    expect(html).toContain('text-align:right;color:#123456')
+    const heading = new DOMParser().parseFromString(html, 'text/html').querySelector('h2')!
+    expect(heading.style.textAlign).toBe('right')
+    expect(heading.style.color).toBe('rgb(18, 52, 86)')
     expect(html).toContain('<strong>Forte</strong>')
     expect(html).toContain('<em>Ênfase</em>')
     expect(html).toContain('start="3"')
@@ -74,4 +78,16 @@ describe('segurança do documento nativo e do fragmento', () => {
     preserveOriginal({ ...old, subject: 'Depois' })
     expect(readOriginal(old.id)?.subject).toBe('Antes')
   })
+})
+
+it('protege contraste do botão e da citação contra CSS importante do provedor', () => {
+  const body = compileEmail(htmlToDocument('<blockquote><p>Uma ideia</p></blockquote><p><a href="https://example.com" style="background-color:#b52930;color:white;display:inline-block;padding:16px">Ler artigo</a></p>'))
+  const dom = new DOMParser().parseFromString(body, 'text/html')
+  const quote = dom.querySelector('blockquote p') as HTMLElement
+  const button = dom.querySelector('a') as HTMLElement
+  expect(quote.style.color).toBe('rgb(37, 37, 37)')
+  expect(quote.style.getPropertyPriority('color')).toBe('important')
+  expect(button.style.color).toBe('rgb(255, 255, 255)')
+  expect(button.style.getPropertyPriority('color')).toBe('important')
+  expect(button.querySelector('span')?.style.getPropertyPriority('color')).toBe('important')
 })

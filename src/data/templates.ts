@@ -28,7 +28,7 @@ export const templates: NewsletterTemplate[] = [
     category: 'ARTIGO',
     subject: 'O que vem antes do logo',
     preheader: 'Uma conversa sobre as decisões que aparecem antes da primeira tela.',
-    buttondownTemplate: 'classic',
+    buttondownTemplate: 'modern',
     content: `<h1>Um bom projeto começa antes do logo</h1>
 <p>O logo costuma chegar no fim da conversa — embora seja a primeira coisa que todo mundo pergunta. Antes dele vêm as perguntas menos fotogênicas: o que precisa mudar, para quem, e por que alguém deveria se importar?</p>
 <h2>A parte que não cabe numa prancha</h2>
@@ -45,7 +45,7 @@ export const templates: NewsletterTemplate[] = [
     category: 'REFERÊNCIAS',
     subject: 'Notas de repertório: três ideias da semana',
     preheader: 'Uma referência visual, uma ideia incômoda e uma leitura para guardar.',
-    buttondownTemplate: 'classic',
+    buttondownTemplate: 'modern',
     content: `<h1>Três coisas que mereciam sair dos favoritos</h1>
 <p>Minha pasta de links salvos é um arquivo arqueológico: muita intenção, pouca visita. Separei três coisas que sobreviveram à escavação desta semana.</p>
 <h2>01 / Uma referência visual</h2>
@@ -66,7 +66,7 @@ export const templates: NewsletterTemplate[] = [
     category: 'ENSAIO',
     subject: 'O enquadramento também conta uma história',
     preheader: 'Um ensaio sobre contexto, autoria e o que muda quando a gente olha de novo.',
-    buttondownTemplate: 'classic',
+    buttondownTemplate: 'modern',
     content: `<h1>Uma imagem, três leituras possíveis</h1>
 <p><em>Às vezes a gente olha para uma imagem procurando a resposta. Ela devolve uma pergunta — o que é menos conveniente e bem mais interessante.</em></p>
 <p>Este espaço aceita uma imagem editorial, mas também funciona sem ela. Se entrar uma, que seja porque muda a leitura do texto; a caixa de entrada já tem imagens decorativas suficientes para uma vida inteira.</p>
@@ -79,7 +79,7 @@ export const templates: NewsletterTemplate[] = [
   {
     id: 'carta', number: '04', name: 'Carta do estúdio', category: 'CONVERSA',
     summary: 'Uma carta breve e pessoal, com abertura acolhedora e uma ideia em destaque.',
-    subject: 'Puxa uma cadeira. O café está pronto.', preheader: 'Uma pausa para conversar sobre o que tem ocupado o estúdio.', buttondownTemplate: 'classic',
+    subject: 'Puxa uma cadeira. O café está pronto.', preheader: 'Uma pausa para conversar sobre o que tem ocupado o estúdio.', buttondownTemplate: 'modern',
     content: `<p style="color:#b52930;font-size:12px;letter-spacing:2px">UMA PAUSA NO DIA</p><h1>Entre um café e uma ideia</h1>
 <p>Olá,</p><p>Hoje eu queria dividir uma observação pequena. Daquelas que aparecem no meio do trabalho e ficam pedindo espaço até a gente escrever.</p>
 <blockquote><p>Nem toda ideia precisa começar grande. Algumas só precisam de atenção.</p></blockquote>
@@ -89,7 +89,7 @@ export const templates: NewsletterTemplate[] = [
   {
     id: 'bastidores', number: '05', name: 'Bastidores de um projeto', category: 'PROCESSO',
     summary: 'Do desafio à solução: uma história de projeto com decisões, aprendizados e um convite para conhecer o resultado.',
-    subject: 'Por dentro do processo', preheader: 'O caminho, as escolhas e os detalhes que a entrega final não mostra.', buttondownTemplate: 'classic',
+    subject: 'Por dentro do processo', preheader: 'O caminho, as escolhas e os detalhes que a entrega final não mostra.', buttondownTemplate: 'modern',
     content: `<p style="color:#b52930;font-size:12px;letter-spacing:2px">CADERNO DE PROCESSO</p><h1>O que acontece antes da entrega</h1>
 <p>Um projeto não cabe só na imagem final. Aqui estão as escolhas que ajudaram a dar forma ao resultado.</p>
 <h2>01 / O desafio</h2><p>Apresente o contexto: quem precisava dessa solução e qual problema merecia ser resolvido?</p>
@@ -101,7 +101,7 @@ export const templates: NewsletterTemplate[] = [
   {
     id: 'convite', number: '06', name: 'Um convite especial', category: 'ENCONTRO',
     summary: 'Uma chamada direta para lançamento, encontro ou novidade, com as informações essenciais e um botão de ação.',
-    subject: 'Tem novidade chegando ao estúdio', preheader: 'Um convite para acompanhar o próximo capítulo.', buttondownTemplate: 'classic',
+    subject: 'Tem novidade chegando ao estúdio', preheader: 'Um convite para acompanhar o próximo capítulo.', buttondownTemplate: 'modern',
     content: `<p style="color:#b52930;font-size:12px;letter-spacing:2px">RESERVE UMA PAUSA</p><h1>Vamos nos encontrar?</h1>
 <p><em>Uma boa conversa merece espaço na agenda.</em></p><p>Apresente o encontro ou lançamento e conte por que ele pode interessar a quem está lendo. Comece pelo motivo do convite.</p>
 <h2>O que você vai encontrar</h2><ul><li>Uma ideia para levar para o seu trabalho.</li><li>Referências e experiências compartilhadas.</li><li>Espaço para perguntas e novas conversas.</li></ul>
