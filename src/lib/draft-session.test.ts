@@ -1,3 +1,4 @@
+import { campaignHash } from '../../shared/campaign-fingerprint'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DraftSession } from './draft-session'
 import { readDrafts } from './storage'
@@ -80,4 +81,16 @@ describe('integridade de rascunhos', () => {
     expect(session.value.subject).toBe('Editado durante gravação')
     expect(session.value.cloudRevision).toBe(1)
   })
+})
+
+it('preserva hash de todos os campos remotos entre sincronizações', async () => {
+  const session = new DraftSession({ ...initial, subject: ' Assunto ', description: ' Prévia ' })
+  const remote = { id: 'em_one', subject: 'Assunto', description: 'Prévia', template: 'classic', body: '<p>Retornado</p>' }
+  const send = vi.fn().mockResolvedValue(remote)
+  await session.sync(async () => '<p>Texto</p>', send)
+  expect(send.mock.calls[0][0]).toMatchObject({ subject: 'Assunto', description: 'Prévia' })
+  expect(session.value.syncedCampaignHash).toBe(await campaignHash(remote))
+  session.edit({ subject: 'Atualizado' })
+  await session.sync(async () => '<p>Texto</p>', send)
+  expect(send.mock.calls[1][0].expectedCampaignHash).toBe(await campaignHash(remote))
 })

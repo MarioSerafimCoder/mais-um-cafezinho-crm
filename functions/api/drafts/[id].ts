@@ -38,8 +38,9 @@ export const onRequestPut = async ({ request, env, params }: Context) => {
       if (!migration || migration.version !== 1 || ![1, 2].includes(Number(migration.sourceSchema)) || !Number.isSafeInteger(migration.sourceRevision) || Number(migration.sourceRevision) < 0) return json({ error: 'Metadados de migração inválidos.' }, 400)
     }
     // Store editorial documents only. No subscribers or credentials belong in D1.
+    if (body.syncedCampaignHash !== undefined && (typeof body.syncedCampaignHash !== 'string' || !/^[a-f0-9]{64}$/.test(body.syncedCampaignHash))) return json({ error: 'Hash de campanha inválido.' }, 400)
     if (body.syncedBodyHash !== undefined && (typeof body.syncedBodyHash !== 'string' || !/^[a-f0-9]{64}$/.test(body.syncedBodyHash))) return json({ error: 'Hash de sincronização inválido.' }, 400)
-    const allowed = ['id', 'subject', 'description', 'buttondownTemplate', 'editionDate', 'content', 'document', 'schemaVersion', 'templateId', 'buttondownId', 'status', 'updatedAt', 'revision', 'lastSyncedAt', 'syncedRevision', 'syncedBodyHash', 'createKey', 'pendingCreate', 'migration']
+    const allowed = ['id', 'subject', 'description', 'buttondownTemplate', 'editionDate', 'content', 'document', 'schemaVersion', 'templateId', 'buttondownId', 'status', 'updatedAt', 'revision', 'lastSyncedAt', 'syncedRevision', 'syncedBodyHash', 'syncedCampaignHash', 'createKey', 'pendingCreate', 'migration']
     const payload = Object.fromEntries(allowed.filter((key) => key in body).map((key) => [key, body[key]]))
     payload.cloudSavedRevision = Number.isSafeInteger(body.revision) ? body.revision : 0
     if (body.schemaVersion === 3) {

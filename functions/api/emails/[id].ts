@@ -1,3 +1,4 @@
+import { campaignHash } from '../../../shared/campaign-fingerprint'
 import { buttondown, errorResponse, json, parseJson, isSafeEmailBody, draftPayload } from '../../_utils'
 import type { AppEnv } from '../../_utils'
 
@@ -37,7 +38,10 @@ export const onRequestPatch = async ({ request, env, params }: Context) => {
     if (existing.status !== 'draft') return json({ error: 'Este email não é um rascunho e não pode ser alterado por este painel.' }, 409)
     // Reconcile an acknowledged-by-provider but lost-to-client update before retrying.
     if (existing.body === data.body && existing.subject === data.subject && (existing.description || '') === (data.description || '') && (!data.template || existing.template === data.template)) return json(existing)
+    const expectedCampaign = request.headers.get('X-Expected-Campaign-Hash')
+    if (expectedCampaign && await campaignHash(existing) !== expectedCampaign) return json({ error: 'A campanha mudou na plataforma. Confira a versão remota antes de continuar.' }, 409)
     const expected = request.headers.get('X-Expected-Body-Hash')
+    if (expected && !expectedCampaign && (existing.subject !== data.subject || (existing.description || '') !== (data.description || '') || (data.template && existing.template != null && existing.template !== data.template))) return json({ error: 'Este rascunho antigo não tem referência dos metadados sincronizados. Exporte sua cópia e confira a versão remota antes de continuar.' }, 409)
     if (expected) {
       const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(existing.body || ''))
       const actual = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')

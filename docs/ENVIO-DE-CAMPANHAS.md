@@ -26,3 +26,7 @@ O recurso está fechado por padrão no servidor (`CAMPAIGN_SENDING_ENABLED` ause
 ## Contrato externo
 
 A Buttondown documenta `send-draft` com arrays de IDs de assinantes ou endereços, e `publish` como operação que publica e envia imediatamente quando não recebe `publish_date`. As permissões de chave são independentes; `sending_access` controla o envio e uma chamada sem permissão retorna 403. Fontes oficiais: [send draft](https://docs.buttondown.com/api-emails-send-draft), [publish email](https://docs.buttondown.com/api-emails-publish), [autenticação e permissões](https://docs.buttondown.com/api-authentication).
+
+## Proteção da sincronização
+
+Novas sincronizações guardam no documento um hash do corpo, assunto, descrição e template retornados pela Buttondown. Atualizações posteriores conferem essa referência antes de gravar; uma resposta perdida pode ser reconciliada quando todos os campos já correspondem ao pedido. Rascunhos antigos sem essa referência mantêm a checagem do corpo e bloqueiam alterações divergentes dos metadados até revisão das cópias local e remota. Espaços nas extremidades do assunto e da descrição são normalizados na validação de envio.

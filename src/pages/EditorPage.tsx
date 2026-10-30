@@ -1,3 +1,4 @@
+import { campaignHash } from '../../shared/campaign-fingerprint'
 import { useEffect, useReducer, useRef, useState } from 'react'
 import { Link, useBlocker, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type { Editor } from 'grapesjs'
@@ -85,7 +86,7 @@ function Workspace({ routeId, templateId, copy }: { routeId: string; templateId:
         if (remote.status !== 'draft' && !copy) throw new Error('Esta campanha já foi enviada. Abra uma cópia para editar.')
         // Fancy isn't a canonical source; don't pretend its transformed document is original HTML.
 
-        const record: DraftRecord = { id: copy ? `local-${crypto.randomUUID()}` : `bd-${remote.id}`, ...(copy ? {} : { buttondownId: remote.id }), subject: remote.subject || '', description: remote.description || '', content: remote.body || '', templateId: null, buttondownTemplate: remote.template === 'modern' ? 'modern' : 'classic', editionDate: today(), status: 'draft', revision: 0, updatedAt: new Date().toISOString() }
+        const record: DraftRecord = { id: copy ? `local-${crypto.randomUUID()}` : `bd-${remote.id}`, ...(copy ? {} : { buttondownId: remote.id, syncedCampaignHash: await campaignHash(remote) }), subject: remote.subject || '', description: remote.description || '', content: remote.body || '', templateId: null, buttondownTemplate: remote.template === 'modern' ? 'modern' : 'classic', editionDate: today(), status: 'draft', revision: 0, updatedAt: new Date().toISOString() }
         source.current = record
         if (remote.template === 'fancy' || (remote.body && !/<[a-z][\s\S]*>/i.test(remote.body))) throw new Error('A campanha remota não contém HTML compatível. O original remoto foi preservado.')
         install(record)

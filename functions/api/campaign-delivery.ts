@@ -69,7 +69,7 @@ async function currentDraft(context: Context, draftId: string, cloudRevision: nu
   const campaign = await buttondown(context, `/emails/${encodeURIComponent(draft.buttondownId)}`) as RemoteCampaign
   if (campaign.status !== 'draft') throw json({ error: 'Esta campanha já não está em rascunho na Buttondown. Só campanhas em draft podem ser preparadas.' }, 409)
   if (typeof campaign.body !== 'string') throw json({ error: 'A Buttondown não retornou o conteúdo da campanha. Atualize a integração e tente novamente.' }, 502)
-  if (campaign.subject !== draft.subject || (campaign.description || '') !== (draft.description || '')) throw json({ error: 'Assunto ou texto de prévia divergente. Salve e sincronize a revisão atual novamente.' }, 409)
+  if (campaign.subject !== draft.subject.trim() || (campaign.description || '') !== (draft.description || '').trim()) throw json({ error: 'Assunto ou texto de prévia divergente. Salve e sincronize a revisão atual novamente.' }, 409)
   if (!matchesButtondownTemplate(campaign.template, draft.buttondownTemplate)) throw json({ error: 'O template da campanha na Buttondown diverge da revisão do CRM. Salve e sincronize novamente.' }, 409)
   if (draft.syncedBodyHash !== await hash(campaign.body)) throw json({ error: 'O conteúdo na Buttondown diverge da revisão salva no CRM. Salve e sincronize novamente.' }, 409)
   return { draft, campaign }

@@ -23,3 +23,17 @@ test('uma consulta lenta não oculta a edição local nem a nuvem', async ({ pag
   await expect(page.getByText('Outra edição', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Tentar novamente' }).first()).toBeVisible()
 })
+
+test('exclui rascunho exclusivamente local sem depender da API', async ({ page }) => {
+  await page.addInitScript(value => localStorage.setItem('mais-um-cafezinho:drafts:v1', JSON.stringify([value])), local)
+  let deletionCalls = 0
+  await page.route('**/api/**', route => {
+    if (route.request().url().includes('/remove-campaign')) deletionCalls++
+    return route.abort()
+  })
+  await page.goto('/campaigns')
+  await page.getByRole('button', { name: 'Excluir campanha Edição local', exact: true }).click()
+  await expect(page.getByText('Campanha excluída.', { exact: true })).toBeVisible()
+  expect(deletionCalls).toBe(0)
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('mais-um-cafezinho:drafts:v1') || '[]'))).toEqual([])
+})

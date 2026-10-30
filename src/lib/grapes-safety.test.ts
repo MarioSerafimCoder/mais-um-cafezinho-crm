@@ -30,6 +30,13 @@ describe('segurança do documento nativo e do fragmento', () => {
     expect(body).toContain('align="center"')
     expect(body).toContain('Primeira coluna')
   })
+  it('centraliza o quadro do e-mail sem substituir o alinhamento interno', () => {
+    const document = htmlToDocument('<h2 style="text-align:right;color:#123456">Título</h2><p>Texto</p>')
+    const body = compileEmail(document)
+    expect(body).toMatch(/max-width:\s*640px/)
+    expect(body).toMatch(/margin:\s*0px? auto/)
+    expect(body).toContain('text-align:right;color:#123456')
+  })
   it('empilha coluna pixel legada para impedir overflow sem CSS de cabeçalho', () => {
     const document = htmlToDocument('<p>Texto</p>')
     document.components[0].components![0].components = [mj('mj-section', {}, [mj('mj-column', { width: '300px' }, [mj('mj-text', {}, [], 'Texto')])])]

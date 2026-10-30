@@ -1,3 +1,4 @@
+import { campaignHash } from '../../shared/campaign-fingerprint'
 import type { DraftRecord } from '../types'
 import type { DocumentNode } from '../../shared/safety'
 import { isEditorDocument } from '../../shared/safety'
@@ -6,7 +7,7 @@ import { validateDraftPayload } from './email'
 import { readDrafts, writeDraft } from './storage'
 
 export type SaveState = 'alterado' | 'salvando' | 'salvo' | 'erro'
-type SyncPayload = { id?: string; subject: string; body: string; description?: string; buttondownTemplate?: 'classic' | 'modern'; createKey?: string; expectedBodyHash?: string }
+type SyncPayload = { id?: string; subject: string; body: string; description?: string; buttondownTemplate?: 'classic' | 'modern'; createKey?: string; expectedBodyHash?: string; expectedCampaignHash?: string }
 
 async function bodyHash(body: string) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body))
@@ -66,7 +67,7 @@ export class DraftSession {
     } finally { this.cloudSaving = false; this.emit() }
   }
 
-  async sync(exportHtml: () => Promise<string>, send: (payload: SyncPayload) => Promise<{ id: string; body?: string }>, beforeCreate?: () => Promise<unknown>) {
+  async sync(exportHtml: () => Promise<string>, send: (payload: SyncPayload) => Promise<{ id: string; body?: string; subject?: string; description?: string; template?: string | null }>, beforeCreate?: () => Promise<unknown>) {
     if (this.syncing) return
     this.syncing = true; this.emit()
     try {
@@ -76,17 +77,18 @@ export class DraftSession {
         // getEmailHTML captures editor JSON synchronously before starting its async render.
         const html = await exportHtml()
         const payload = validateDraftPayload(snapshot.subject, html)
-        pending = { key: snapshot.createKey || `crm-${snapshot.id}`, subject: payload.subject, body: payload.body, description: snapshot.description || '', template: snapshot.buttondownTemplate || 'classic', revision: snapshot.revision || 0 }
+        pending = { key: snapshot.createKey || `crm-${snapshot.id}`, subject: payload.subject, body: payload.body, description: (snapshot.description || '').trim(), template: snapshot.buttondownTemplate || 'classic', revision: snapshot.revision || 0 }
       }
       if (!snapshot.buttondownId) {
         this.value = { ...this.value, createKey: pending.key, pendingCreate: pending, cloudSavedRevision: undefined }
         this.save() // Retrying an uncertain creation must resend exactly the same payload/key.
         if (beforeCreate) await beforeCreate()
       }
-      const response = await send({ id: snapshot.buttondownId, subject: pending.subject, body: pending.body, description: pending.description, buttondownTemplate: pending.template, createKey: pending.key, expectedBodyHash: snapshot.syncedBodyHash })
+      const response = await send({ id: snapshot.buttondownId, subject: pending.subject, body: pending.body, description: pending.description, buttondownTemplate: pending.template, createKey: pending.key, expectedBodyHash: snapshot.syncedBodyHash, expectedCampaignHash: snapshot.syncedCampaignHash })
       if (!response.id) throw new Error('A Buttondown não retornou o identificador do rascunho.')
+      const syncedCampaignHash = await campaignHash({ subject: pending.subject, body: pending.body, description: pending.description, template: pending.template, ...response })
       const syncedBodyHash = await bodyHash(typeof response.body === 'string' ? response.body : pending.body)
-      this.value = { ...this.value, content: pending.body, buttondownId: response.id, lastSyncedAt: new Date().toISOString(), syncedRevision: pending.revision, syncedBodyHash, pendingCreate: undefined, cloudSavedRevision: undefined }
+      this.value = { ...this.value, content: pending.body, buttondownId: response.id, lastSyncedAt: new Date().toISOString(), syncedRevision: pending.revision, syncedBodyHash, syncedCampaignHash, pendingCreate: undefined, cloudSavedRevision: undefined }
       this.save()
       return response
     } finally { this.syncing = false; this.emit() }

@@ -51,6 +51,7 @@ function applyResponsiveColumns(dom: Document, source: string) {
 
 export function compileEmail(doc: GrapesDocument) {
   const source = exportMjml(doc)
+  const desktopWidth = bodyWidth(source)
   const result = mjml(source, { validationLevel: 'strict', fonts: {}, keepComments: false })
   if (result.errors.length) throw new Error(`Não foi possível exportar: ${result.errors.map(e => e.message).join('; ')}`)
   const dom = new DOMParser().parseFromString(result.html, 'text/html')
@@ -58,7 +59,10 @@ export function compileEmail(doc: GrapesDocument) {
   // Standard MJML reset rules are applied directly; no font fetches or head CSS.
   for (const table of dom.body.querySelectorAll<HTMLElement>('table')) { table.style.borderCollapse = 'collapse'; table.setAttribute('role', 'presentation') }
   for (const img of dom.body.querySelectorAll<HTMLElement>('img')) { img.style.maxWidth = '100%'; img.style.border = '0'; img.style.display = 'block' }
-  const body = `<table role="presentation" align="center" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse"><tbody><tr><td align="center">${dom.body.innerHTML}</td></tr></tbody></table>`
+  // Keep the newsletter frame centered in clients that ignore MJML's head CSS.
+  // The inner cell remains left-aligned so authored paragraph/heading alignment
+  // is preserved while the email itself stays centered in the message body.
+  const body = `<table role="presentation" align="center" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin:0 auto;text-align:center"><tbody><tr><td align="center" style="text-align:center"><table role="presentation" align="center" width="${desktopWidth}" cellpadding="0" cellspacing="0" style="width:100%;max-width:${desktopWidth}px;border-collapse:collapse;margin:0 auto;text-align:left"><tbody><tr><td align="left" style="text-align:left;padding:0">${dom.body.innerHTML}</td></tr></tbody></table></td></tr></tbody></table>`
   if (byteLength(body) > 199_500 || !isSafeEmailBody(body)) throw new Error('O HTML exportado é inseguro ou ultrapassa 200 KB.')
   return compatibleEmailBody(body)
 }

@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { campaignHash } from '../shared/campaign-fingerprint'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { onRequestGet as status } from './api/status'
 import { clearDashboardCache, onRequestGet as dashboard } from './api/dashboard'
@@ -51,19 +52,13 @@ describe('Buttondown com mocks, sem chamadas externas', () => {
     expect(result.sentCampaigns).toBe(123)
   })
 
-  it('preserva analytics disponíveis e não falha quando o recurso não está liberado', async () => {
-    const network = vi.fn(async (url: string | URL | Request) => {
-      if (String(url).includes('/analytics')) return Response.json({ recipients: 12, deliveries: 12, opens: 7, clicks: 1 })
-      return Response.json({ results: [{ id: 'em_sent', subject: 'Campanha', status: 'sent' }], count: 1 })
-    })
+  it('carrega as edições sem consultar analytics', async () => {
+    const network = vi.fn(async (_url: string | URL | Request) => Response.json({ results: [{ id: 'em_sent', subject: 'Campanha', status: 'sent', creation_date: '2026-10-20T12:00:00Z' }], count: 1 }))
     vi.stubGlobal('fetch', network)
-    const result = await (await dashboard({ request, env })).json() as { recent: Array<{ analytics?: { opens?: number } }> }
-    expect(result.recent[0]?.analytics?.opens).toBe(7)
-
-    clearDashboardCache()
-    network.mockImplementation(async (url: string | URL | Request) => String(url).includes('/analytics') ? Response.json({ detail: 'analytics add-on unavailable' }, { status: 403 }) : Response.json({ results: [{ id: 'em_sent', subject: 'Campanha', status: 'sent' }], count: 1 }))
-    const unavailable = await (await dashboard({ request, env })).json() as { recent: Array<{ analytics: unknown }> }
-    expect(unavailable.recent[0]?.analytics).toBeNull()
+    const result = await (await dashboard({ request, env })).json() as { recent: Array<{ creation_date: string }> }
+    expect(result.recent[0]?.creation_date).toBe('2026-10-20T12:00:00Z')
+    expect(network).toHaveBeenCalledTimes(6)
+    expect(network.mock.calls.some(args => String(args[0]).includes('/analytics'))).toBe(false)
   })
 
   it('preserva métricas independentes quando uma consulta falha', async () => {
@@ -182,5 +177,20 @@ it('confirma atualização já aplicada após timeout sem repetir PATCH', async 
   mock({ id: 'em_test', status: 'draft', subject: 'Local', body: '<p>Local</p>' })
   const request = new Request('https://crm.test/api/emails/em_test', { method: 'PATCH', headers: { 'X-Expected-Body-Hash': 'a'.repeat(64) }, body: JSON.stringify({ subject: 'Local', body: '<p>Local</p>', status: 'draft' }) })
   expect((await patch({ request, env, params: { id: 'em_test' } })).status).toBe(200)
+  expect(fetch).toHaveBeenCalledOnce()
+})
+
+it.each(['subject', 'description', 'template'] as const)('preserva alteração remota em %s mesmo com corpo idêntico', async field => {
+  const original = { id: 'em_test', status: 'draft', subject: 'Original', description: 'Prévia', template: 'classic', body: '<p>Texto</p>' }
+  mock({ ...original, [field]: field === 'template' ? 'modern' : 'Alterado' })
+  const request = new Request('https://crm.test/api/emails/em_test', { method: 'PATCH', headers: { 'X-Expected-Campaign-Hash': await campaignHash(original) }, body: JSON.stringify({ ...original, subject: 'Edição local' }) })
+  expect((await patch({ request, env, params: { id: 'em_test' } })).status).toBe(409)
+  expect(fetch).toHaveBeenCalledOnce()
+})
+
+it('rascunho antigo sem hash completo bloqueia divergência de metadados', async () => {
+  mock({ id: 'em_test', status: 'draft', subject: 'Remoto', body: '<p>Texto</p>' })
+  const request = new Request('https://crm.test/api/emails/em_test', { method: 'PATCH', headers: { 'X-Expected-Body-Hash': 'a'.repeat(64) }, body: JSON.stringify({ subject: 'Local', body: '<p>Texto</p>', status: 'draft' }) })
+  expect((await patch({ request, env, params: { id: 'em_test' } })).status).toBe(409)
   expect(fetch).toHaveBeenCalledOnce()
 })

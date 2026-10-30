@@ -11,6 +11,7 @@ export class DraftPersistence {
   busy = false
   private stopped = false
   private blocked = false
+  private blockedRevision?: number
   private retryCount = 0
   private timer?: ReturnType<typeof setTimeout>
   private running?: Promise<void>
@@ -42,6 +43,7 @@ export class DraftPersistence {
     clearTimeout(this.timer)
     this.timer = setTimeout(() => {
       try { this.session.save() } catch { this.onChange(); return }
+      if (this.blockedRevision !== undefined && this.blockedRevision !== (this.session.value.revision || 0)) this.blocked = false
       if (!this.blocked) void this.flush().catch(() => {})
     }, 600)
     this.onChange()
@@ -63,7 +65,7 @@ export class DraftPersistence {
         // A lost acknowledgement is reconciled by reading, never by blind writes.
         if (error instanceof ApiError && (error.status === 0 || error.status >= 500)) {
           const remote = await this.services.cloudDraft(snapshot.id).catch(() => null)
-          const fields = ['subject', 'document', 'content', 'description', 'editionDate', 'templateId', 'buttondownTemplate', 'revision', 'buttondownId', 'syncedRevision', 'pendingCreate'] as const
+          const fields = ['subject', 'document', 'content', 'description', 'editionDate', 'templateId', 'buttondownTemplate', 'revision', 'buttondownId', 'syncedRevision', 'pendingCreate', 'syncedBodyHash', 'syncedCampaignHash'] as const
           if (remote && remote.cloudRevision === (snapshot.cloudRevision || 0) + 1 && fields.every(key => JSON.stringify(remote[key]) === JSON.stringify(snapshot[key]))) return remote
         }
         throw error
@@ -100,6 +102,8 @@ export class DraftPersistence {
         // Unknown external outcomes need explicit recovery. D1 is protected by CAS.
         const recoverable = (destination === 'cloud' || Boolean(this.session.value.buttondownId && this.session.value.syncedBodyHash)) && error instanceof ApiError && (error.status === 0 || error.status === 429 || error.status >= 500)
         this.blocked = !recoverable
+        // Only local validation errors may resume automatically after an edit.
+        this.blockedRevision = !(error instanceof ApiError) && destination === 'buttondown' && !this.session.value.pendingCreate ? (this.session.value.revision || 0) : undefined
         if (recoverable && this.retryCount < 3 && !this.stopped) {
           const delay = 1000 * 2 ** this.retryCount++
           this.timer = setTimeout(() => { void this.flush().catch(() => {}) }, delay)

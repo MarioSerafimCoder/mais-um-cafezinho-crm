@@ -81,7 +81,8 @@ export function CampaignsPage() {
     try {
       const remoteId = campaign.id.startsWith('bd:') ? campaign.id.slice(3) : undefined
       const draftId = campaign.id.startsWith('doc:') ? campaign.id.slice(4) : campaign.editorId !== remoteId ? campaign.editorId : undefined
-      const result = await api.deleteCampaign(draftId, remoteId)
+      const onlyLocal = !remoteId && !campaign.draft?.buttondownId && !campaign.draft?.cloudRevision && !cloud.some(item => item.id === draftId) && Boolean(campaign.draft)
+      const result = onlyLocal ? { campaignId: null } : await api.deleteCampaign(draftId, remoteId)
       for (const draft of readDrafts()) if (draft.id === draftId || (result.campaignId && draft.buttondownId === result.campaignId)) removeDraft(draft.id)
       setLocal(readDrafts()); setCloud(items => items.filter(item => item.id !== draftId && (!result.campaignId || item.buttondownId !== result.campaignId))); setRemote(items => items.filter(item => item.id !== result.campaignId))
       setNotice('Campanha excluída.')

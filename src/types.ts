@@ -20,6 +20,7 @@ export type DraftRecord = {
   lastSyncedAt?: string
   syncedRevision?: number
   syncedBodyHash?: string
+  syncedCampaignHash?: string
   createKey?: string
   cloudSavedRevision?: number
   pendingCreate?: { key: string; subject: string; body: string; description?: string; template?: 'classic' | 'modern'; revision: number }

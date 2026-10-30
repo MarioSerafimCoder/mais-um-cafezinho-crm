@@ -48,9 +48,9 @@ export const api = {
   editorialTest: (payload: Record<string, unknown>) => request<{ attemptId?: string; recipient?: string; accepted?: boolean; state?: string }>('/api/editorial-test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
   campaigns: (page = 1) => request<ApiPage<Campaign>>(`/api/emails?page=${page}`),
   campaign: (id: string) => request<Campaign>(`/api/emails/${encodeURIComponent(id)}`),
-  saveDraft: (payload: { id?: string; subject: string; body: string; description?: string; buttondownTemplate?: 'classic' | 'modern'; createKey?: string; expectedBodyHash?: string }) => request<Campaign>(payload.id ? `/api/emails/${encodeURIComponent(payload.id)}` : '/api/emails', {
+  saveDraft: (payload: { id?: string; subject: string; body: string; description?: string; buttondownTemplate?: 'classic' | 'modern'; createKey?: string; expectedBodyHash?: string; expectedCampaignHash?: string }) => request<Campaign>(payload.id ? `/api/emails/${encodeURIComponent(payload.id)}` : '/api/emails', {
     method: payload.id ? 'PATCH' : 'POST',
-    headers: { 'Content-Type': 'application/json', ...(!payload.id && payload.createKey ? { 'X-Idempotency-Key': payload.createKey } : {}), ...(payload.expectedBodyHash ? { 'X-Expected-Body-Hash': payload.expectedBodyHash } : {}) },
+    headers: { 'Content-Type': 'application/json', ...(!payload.id && payload.createKey ? { 'X-Idempotency-Key': payload.createKey } : {}), ...(payload.expectedCampaignHash ? { 'X-Expected-Campaign-Hash': payload.expectedCampaignHash } : {}), ...(payload.expectedBodyHash ? { 'X-Expected-Body-Hash': payload.expectedBodyHash } : {}) },
     body: JSON.stringify({ subject: payload.subject, body: payload.body, status: 'draft', ...(payload.description !== undefined ? { description: payload.description } : {}), ...(payload.buttondownTemplate ? { template: payload.buttondownTemplate } : {}) }),
   }),
   uploadImage: async (file: File) => {

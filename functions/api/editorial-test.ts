@@ -52,7 +52,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: A
     const campaign = await buttondown({ request, env }, `/emails/${draft.buttondownId}`) as { status: string; body: string; subject: string; description?: string; template?: string | null }
     if (campaign.status !== 'draft') return json({ error: 'Esta campanha já não está em rascunho na Buttondown. Sincronize um rascunho antes de preparar o teste.' }, 409)
     if (typeof campaign.body !== 'string') return json({ error: 'A Buttondown não retornou o conteúdo da campanha.' }, 502)
-    if (campaign.subject !== draft.subject || (campaign.description || '') !== (draft.description || '')) return json({ error: 'Assunto ou texto de prévia divergente. Salve e sincronize novamente.' }, 409)
+    if (campaign.subject !== draft.subject.trim() || (campaign.description || '') !== (draft.description || '').trim()) return json({ error: 'Assunto ou texto de prévia divergente. Salve e sincronize novamente.' }, 409)
     if (!matchesButtondownTemplate(campaign.template, draft.buttondownTemplate)) return json({ error: 'O template da campanha na Buttondown diverge da revisão do CRM. Salve e sincronize novamente.' }, 409)
     if (draft.syncedBodyHash !== await bodyHash(campaign.body)) return json({ error: 'O conteúdo na Buttondown diverge da revisão salva no CRM. Salve e sincronize novamente.' }, 409)
     if (!input.attemptId) {

@@ -21,7 +21,6 @@ type DashboardSummary = {
   integrationError?: string
 }
 type DashboardCacheEntry = { summary: DashboardSummary; cachedAt: number }
-const analyticsFields = ['recipients', 'deliveries', 'opens', 'clicks', 'temporary_failures', 'permanent_failures', 'unsubscriptions', 'complaints', 'open_rate', 'click_rate', 'temporary_failure_rate', 'complaint_rate'] as const
 const cacheTtlMs = 60_000
 const maxStaleMs = 5 * 60_000
 let dashboardCache = new WeakMap<object, DashboardCacheEntry>()
@@ -39,29 +38,6 @@ function count(result: ListResult) {
   return Number.isFinite(result.count) ? Number(result.count) : null
 }
 
-function safeAnalytics(value: unknown) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const input = value as Record<string, unknown>
-  const output: Record<string, number> = {}
-  for (const field of analyticsFields) if (typeof input[field] === 'number' && Number.isFinite(input[field])) output[field] = input[field]
-  return output
-}
-
-type AnalyticsCampaign = Record<string, unknown> & { analytics: Record<string, number> | null; analyticsUnavailable?: boolean }
-async function attachAnalytics(campaign: Record<string, unknown>, request: Request, env: AppEnv): Promise<AnalyticsCampaign> {
-  if (campaign.status !== 'sent' || typeof campaign.id !== 'string') return { ...campaign, analytics: null }
-  const embedded = safeAnalytics(campaign.analytics ?? campaign)
-  if (embedded && Object.keys(embedded).length > 0) return { ...campaign, analytics: embedded }
-  try {
-    const result = await buttondown({ request, env }, `/emails/${encodeURIComponent(campaign.id)}/analytics`)
-    return { ...campaign, analytics: safeAnalytics(result) }
-  } catch {
-    // Tracking can be disabled or unavailable for an individual email. The
-    // overview should still render the campaign and use em dashes for metrics.
-    return { ...campaign, analytics: null, analyticsUnavailable: true }
-  }
-}
-
 function statusOf(reason: unknown) {
   return typeof reason === 'object' && reason && 'status' in reason ? Number(reason.status) : 0
 }
@@ -71,7 +47,7 @@ function isAuthFailure(reason: unknown) {
 }
 
 function responseSummary(summary: DashboardSummary, unavailable: string[], staleFields: string[], options: { stale?: boolean; cached?: boolean; cacheAgeSeconds?: number; integrationError?: string } = {}) {
-  const partial = unavailable.length > 0 || staleFields.length > 0 || summary.recent.some(campaign => campaign.analyticsUnavailable === true)
+  const partial = unavailable.length > 0 || staleFields.length > 0
   return {
     ...summary,
     ...(partial ? { partial: true } : {}),
@@ -118,11 +94,7 @@ export const onRequestGet = async ({ request, env }: Context) => {
       if (canUseStale && cache) { staleFields.push(field); return cache.summary[field] }
       unavailable.push(field); return []
     }
-    let recent: Array<Record<string, unknown>>
-    if (pages[5]) {
-      const attached = await Promise.all((pages[5].results || []).slice(0, 5).map(campaign => attachAnalytics(campaign, request, env)))
-      recent = attached
-    } else recent = readArray('recent', null)
+    const recent = pages[5] ? (pages[5].results || []).slice(0, 5) : readArray('recent', null)
     const upcoming = pages[4] ? (pages[4].results || []).slice(0, 3) : readArray('upcoming', null)
     const authenticationFailure = failures.find(item => isAuthFailure(item.reason))
     const summary: DashboardSummary = {

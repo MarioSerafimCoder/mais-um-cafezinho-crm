@@ -72,3 +72,13 @@ it('bloqueia uma preparação expirada sem chamar confirm', async () => {
   await waitFor(() => expect(screen.getByText(/preparação expirou/i)).toBeInTheDocument())
   expect(mocks.campaignDelivery).toHaveBeenCalledTimes(1)
 })
+
+it('bloqueia preparação quando o proprietário desativou envios', async () => {
+  mocks.campaignDeliveryStatus.mockResolvedValue({ enabled: false })
+  renderSummary()
+  await screen.findByText(/Campanhas bloqueadas pelo proprietário/)
+  const prepare = screen.getByRole('button', { name: 'Preparar envio' })
+  expect(prepare).toBeDisabled()
+  fireEvent.click(prepare)
+  expect(mocks.campaignDelivery).not.toHaveBeenCalled()
+})

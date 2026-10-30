@@ -152,3 +152,11 @@ it('metadados pendentes continuam identificáveis depois de reabrir o documento'
   expect(reopened.services.saveCloudDraft).toHaveBeenCalledWith(expect.objectContaining({ buttondownId: 'em_queue' }))
   expect(reopened.services.saveDraft).not.toHaveBeenCalled()
 })
+
+it('retoma autosave após corrigir um assunto vazio', async () => {
+  const { queue, session, services } = setup({ ...initial, subject: '', buttondownId: 'em_existing', syncedRevision: -1 })
+  await expect(queue.flush()).rejects.toThrow('Dê um assunto')
+  session.edit({ subject: 'Corrigido' }); queue.schedule()
+  await vi.advanceTimersByTimeAsync(2000)
+  expect(services.saveDraft).toHaveBeenCalledOnce()
+})
