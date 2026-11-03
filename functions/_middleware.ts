@@ -41,14 +41,31 @@ export const onRequest = async ({ request, env, next }: Context) => {
   }
 
   // Pages aliases and previews must never provide another entry point to the CRM.
-  if (!isLocal && url.hostname !== 'crm.marioserafim.com.br') {
+  if (!isLocal && url.hostname !== 'crm.marioserafim.com.br' && !(env.ENVIRONMENT === 'staging' && env.CRM_ORIGIN === 'https://crm-ecosystem-staging.pages.dev' && url.origin === env.CRM_ORIGIN)) {
     return withSecurityHeaders(Response.json({ error: 'Endereço não autorizado.' }, { status: 404 }), isApi)
   }
   if (!isLocal && url.protocol !== 'https:') {
     url.protocol = 'https:'
     return withSecurityHeaders(Response.redirect(url.toString(), 308), isApi)
   }
-  if (url.pathname.startsWith('/integration/v1/')) return withSecurityHeaders(await integrationRoute(request, env), true)
+  if (url.pathname.startsWith('/integration/v1/')) {
+    let serviceRequest = request
+    if (env.ECOSYSTEM_ACCESS_AUD) {
+      const team = env.CF_ACCESS_TEAM_DOMAIN?.trim().replace(/^https?:\/\//, '').replace(/\/$/, '')
+      const assertion = request.headers.get('Cf-Access-Jwt-Assertion')
+      if (!team || !assertion) return withSecurityHeaders(Response.json({error:'service_identity_required'},{status:401}),true)
+      try {
+        const {payload} = await jwtVerify(assertion, accessJwks(team), {issuer:`https://${team}`,audience:env.ECOSYSTEM_ACCESS_AUD,algorithms:['RS256']})
+        if (payload.email) throw new Error('human_identity_forbidden')
+        // Access injects its authorization cookie for service requests. Remove it only
+        // after verifying a service JWT for the integration-specific audience.
+        const headers = new Headers(request.headers)
+        headers.delete('Cookie')
+        serviceRequest = new Request(request,{headers})
+      } catch { return withSecurityHeaders(Response.json({error:'service_identity_invalid'},{status:401}),true) }
+    }
+    return withSecurityHeaders(await integrationRoute(serviceRequest, env), true)
+  }
   if (request.headers.has('X-Ecosystem-Signature')) return withSecurityHeaders(Response.json({error:'forbidden_scope'}, {status:403}), true)
   const teamDomain = env.CF_ACCESS_TEAM_DOMAIN?.trim().replace(/^https?:\/\//, '').replace(/\/$/, '')
   const audience = env.CF_ACCESS_AUD?.trim()
