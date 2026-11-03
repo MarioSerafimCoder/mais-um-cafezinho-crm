@@ -3,6 +3,8 @@ import type { D1Database } from '@cloudflare/workers-types'
 export { isSafeEmailBody } from '../shared/safety'
 
 export type AppEnv = {
+  ECOSYSTEM_SECRET?: string
+  ECOSYSTEM_ACCESS_SUB?: string
   BUTTONDOWN_API_KEY?: string
   CF_ACCESS_TEAM_DOMAIN?: string
   CF_ACCESS_AUD?: string

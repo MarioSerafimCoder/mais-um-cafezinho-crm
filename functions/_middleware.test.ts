@@ -83,3 +83,11 @@ describe('proteção do CRM em produção', () => {
     expect((await call('http://127.0.0.1:8788/', { ...config, ENVIRONMENT: 'production' }).response).status).toBe(401)
   })
 })
+
+it('rejects service identities from user APIs even without ecosystem signature headers', async () => {
+  const assertion = await new SignJWT({}).setProtectedHeader({ alg: 'RS256', kid: 'test' })
+    .setIssuer(`https://${domain}`).setAudience(env.CF_ACCESS_AUD).setExpirationTime('5m').sign(keys.privateKey)
+  const { response, next } = call('https://crm.marioserafim.com.br/api/campaign-delivery', env, assertion)
+  expect((await response).status).toBe(401)
+  expect(next).not.toHaveBeenCalled()
+})

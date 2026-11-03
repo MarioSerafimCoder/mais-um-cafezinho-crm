@@ -1,3 +1,4 @@
+import { integrationRoute } from './_integration'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import type { AppEnv } from './_utils'
 
@@ -47,6 +48,8 @@ export const onRequest = async ({ request, env, next }: Context) => {
     url.protocol = 'https:'
     return withSecurityHeaders(Response.redirect(url.toString(), 308), isApi)
   }
+  if (url.pathname.startsWith('/integration/v1/')) return withSecurityHeaders(await integrationRoute(request, env), true)
+  if (request.headers.has('X-Ecosystem-Signature')) return withSecurityHeaders(Response.json({error:'forbidden_scope'}, {status:403}), true)
   const teamDomain = env.CF_ACCESS_TEAM_DOMAIN?.trim().replace(/^https?:\/\//, '').replace(/\/$/, '')
   const audience = env.CF_ACCESS_AUD?.trim()
 
@@ -59,7 +62,8 @@ export const onRequest = async ({ request, env, next }: Context) => {
       return withSecurityHeaders(Response.json({ error: 'Acesso restrito.' }, { status: 401 }), url.pathname.startsWith('/api/'))
     }
     try {
-      await jwtVerify(assertion, accessJwks(teamDomain), { issuer: `https://${teamDomain}`, audience, algorithms: ['RS256'] })
+      const { payload } = await jwtVerify(assertion, accessJwks(teamDomain), { issuer: `https://${teamDomain}`, audience, algorithms: ['RS256'] })
+      if (typeof payload.email !== 'string' || !payload.email || (env.ECOSYSTEM_ACCESS_SUB && payload.sub === env.ECOSYSTEM_ACCESS_SUB)) throw new Error('forbidden_scope')
     } catch {
       return withSecurityHeaders(Response.json({ error: 'Acesso restrito.' }, { status: 401 }), url.pathname.startsWith('/api/'))
     }
