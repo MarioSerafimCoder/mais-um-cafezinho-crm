@@ -35,7 +35,7 @@ export async function integrationRoute(
       json({
         version: VERSION,
         id,
-        adminUrl: `https://crm.marioserafim.com.br/editor/${id}`,
+        adminUrl: `${env.ENVIRONMENT === "staging" && env.CRM_ORIGIN === "https://crm-ecosystem-staging.pages.dev" ? env.CRM_ORIGIN : "https://crm.marioserafim.com.br"}/editor/${id}`,
         articleSlug: a.slug,
         articleVersion: a.sha,
       });

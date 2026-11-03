@@ -91,3 +91,17 @@ it('rejects service identities from user APIs even without ecosystem signature h
   expect((await response).status).toBe(401)
   expect(next).not.toHaveBeenCalled()
 })
+
+it('integration Access audience accepts service JWT with Access cookie and rejects human JWT', async()=>{
+ const config={...env,ECOSYSTEM_ACCESS_AUD:'integration-audience',ECOSYSTEM_SECRET:'isolated-integration-secret-'.repeat(2)}
+ const base='https://crm.marioserafim.com.br/integration/v1/not-found'
+ const signed=await import('../shared/ecosystem-contract')
+ const service=await new SignJWT({common_name:'staging-service'}).setProtectedHeader({alg:'RS256',kid:'test'}).setIssuer(`https://${domain}`).setAudience('integration-audience').setExpirationTime('5m').sign(keys.privateKey)
+ const request=await signed.sign(new Request(base,{headers:{Cookie:'CF_Authorization=synthetic-access-cookie','Cf-Access-Jwt-Assertion':service}}),config.ECOSYSTEM_SECRET)
+ const next=vi.fn(async()=>new Response('must not reach user routes'))
+ expect((await onRequest({env:config,request,next})).status).toBe(404)
+ const human=await token('integration-audience')
+ const humanRequest=await signed.sign(new Request(base,{headers:{'Cf-Access-Jwt-Assertion':human}}),config.ECOSYSTEM_SECRET)
+ expect((await onRequest({env:config,request:humanRequest,next})).status).toBe(401)
+ expect(next).not.toHaveBeenCalled()
+})
