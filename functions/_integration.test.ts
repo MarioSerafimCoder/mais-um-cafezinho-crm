@@ -155,3 +155,12 @@ it("rejects unauthenticated, future, invalid, and send/schedule/subscriber opera
   }
   expect(fetch).not.toHaveBeenCalled();
 });
+
+it('exports only basic sent campaign metadata and never paid analytics or personal recipients',async()=>{
+ const {env}=setup();env.BUTTONDOWN_API_KEY='synthetic-provider-key';
+ const provider=vi.fn(async()=>Response.json({results:[{id:'synthetic',subject:'Edição um',publish_date:'2026-11-01T12:00:00Z',recipient_count:0,body:'private',recipients:['private@example.invalid']}],next:null}));
+ vi.stubGlobal('fetch',provider);
+ const req=await sign(new Request('https://crm.marioserafim.com.br/integration/v1/newsletter-summary'),env.ECOSYSTEM_SECRET!);
+ const response=await integrationRoute(req,env);expect(response.status).toBe(200);
+ const data=await response.json() as any;expect(data.campaigns[0]).toEqual({id:'synthetic',subject:'Edição um',campaignSlug:'edicao-um',sentAt:'2026-11-01T12:00:00Z',recipients:0});expect(JSON.stringify(data)).not.toContain('private');expect(provider).toHaveBeenCalledTimes(1);
+});

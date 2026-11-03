@@ -1,4 +1,5 @@
-import { type AppEnv, json, errorResponse } from "./_utils";
+import { campaignSlug } from '../src/lib/newsletter-attribution';
+import { type AppEnv, json, errorResponse, buttondown } from "./_utils";
 import {
   verify,
   articleInput,
@@ -16,6 +17,13 @@ export async function integrationRoute(
 ): Promise<Response> {
   try {
     const raw = await verify(request, env.ECOSYSTEM_SECRET);
+    if (new URL(request.url).pathname === "/integration/v1/newsletter-summary" && request.method === "GET") {
+      const upstream = await buttondown({request,env}, '/emails?status=sent&ordering=-creation_date&page=1') as {results?: Array<Record<string, unknown>>;count?:number;next?:string|null};
+      return json({version:'newsletter-1.0', campaigns:(upstream.results || []).map(c => ({
+        id: String(c.id || '').slice(0,100), subject:String(c.subject || '').slice(0,200), campaignSlug:campaignSlug(String(c.subject || '')), sentAt:typeof c.publish_date === 'string' ? c.publish_date : null,
+        recipients:typeof c.recipient_count === 'number' ? c.recipient_count : null
+      })), limited:!!upstream.next});
+    }
     if (
       new URL(request.url).pathname !== "/integration/v1/newsletter-drafts" ||
       request.method !== "POST"

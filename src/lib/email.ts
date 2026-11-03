@@ -1,3 +1,4 @@
+import { attributeNewsletter } from './newsletter-attribution'
 import { isSafeEmailBody, byteLength } from '../../shared/safety'
 
 /** Buttondown's Classic and Modern templates add the compliant unsubscribe footer. */
@@ -11,7 +12,7 @@ export function validateDraftPayload(subject: string, html: string) {
   if (!isSafeEmailBody(html)) {
     throw new Error('O conteúdo contém marcação ativa que não pode ser salva.')
   }
-  return { subject: cleanSubject, body: `<!-- buttondown-editor-mode: plaintext -->${compatibleEmailBody(html)}`, status: 'draft' as const }
+  return { subject: cleanSubject, body: `<!-- buttondown-editor-mode: plaintext -->${compatibleEmailBody(attributeNewsletter(html, cleanSubject))}`, status: 'draft' as const }
 }
 
 // Raw HTML inside Markdown mode avoids the lossy Fancy document conversion.
