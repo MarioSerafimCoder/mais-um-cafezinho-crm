@@ -1,6 +1,6 @@
 import { activeAudienceFilters } from '../../shared/audience'
 import { countActiveSubscribers as countActive, validateSelectedSubscribers as validateSelected } from '../_subscriber-audience'
-import { selectedAudienceFilters } from '../_campaign-audience'
+import { selectedAudienceFilters, selectedAudienceKey, prepareSelectedAudience } from '../_campaign-audience'
 import { database, getDocument } from '../_documents'
 import { buttondown, buttondownValidationFields, errorResponse, json, matchesButtondownTemplate, parseJson, validId, type AppEnv } from '../_utils'
 
@@ -143,6 +143,7 @@ export async function onRequestPost(context: Context) {
         if (recipientCount < 1) return json({ error: 'Não há assinantes ativos para este envio.' }, 409)
       } else {
         const subscribers = await validateSelected(context, audience.subscriberIds)
+        await prepareSelectedAudience(context, campaign.id, subscribers)
         selectedRecipients = subscribers.map((subscriber) => ({ id: subscriber.id, email_address: subscriber.email_address }))
         subscriberIds = JSON.stringify(selectedRecipients)
         recipientCount = subscribers.length
@@ -189,14 +190,15 @@ export async function onRequestPost(context: Context) {
           const subscribers = selectedRecipients.length ? await validateSelected(context, selectedRecipients.map((recipient) => recipient.id)) : []
           if (attempt.audience_mode === 'selected' && (subscribers.length !== attempt.audience_count || subscribers.some((subscriber, index) => subscriber.email_address !== selectedRecipients[index]?.email_address))) throw json({ error: 'A seleção ou o endereço de um contato mudou. Prepare o envio novamente.' }, 409)
           if (attempt.audience_mode === 'all_active' && await countActive(context) !== attempt.audience_count) throw json({ error: 'A quantidade de assinantes ativos mudou desde a prévia. Prepare o envio novamente para conferir a contagem atual.' }, 409)
-          return { draft, subscribers, campaign }
+          const filters = attempt.audience_mode === 'selected' ? selectedAudienceFilters(await selectedAudienceKey(campaign.id, subscribers), subscribers) : activeAudienceFilters()
+          return { draft, filters, campaign }
         } catch (error) {
           if (error instanceof Response && error.status >= 400 && error.status < 500) await db.prepare("UPDATE campaign_send_attempts SET state = 'expired' WHERE id = ? AND state = 'prepared'").bind(attempt.id).run()
           throw error
         }
       })()
-      const { draft, subscribers, campaign } = preflight
-      const publication = attempt.audience_mode === 'selected' ? { filters: selectedAudienceFilters(subscribers) } : { filters: activeAudienceFilters() }
+      const { draft, filters, campaign } = preflight
+      const publication = { filters }
 
       const claimed = await db.prepare("UPDATE campaign_send_attempts SET state = 'attempted', publication_hash = ? WHERE id = ? AND state = 'prepared' AND EXISTS (SELECT 1 FROM editorial_documents WHERE kind = 'draft' AND id = ? AND version = ?)")
         .bind(await publicationFingerprint({ ...campaign, filters: publication.filters }), attempt.id, draft.id, draft.cloudRevision).run()

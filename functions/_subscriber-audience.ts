@@ -1,7 +1,7 @@
 import { activeSubscriberQuery, isActiveSubscriberType } from '../shared/audience'
 import { buttondown, json, pageResult, type AppEnv } from './_utils'
 type Context = { request: Request; env: AppEnv }
-export type AudienceSubscriber = { id: string; email_address: string; type: string }
+export type AudienceSubscriber = { id: string; email_address: string; type: string; metadata?: Record<string, unknown> }
 export async function subscriberPage(context: Context, query: URLSearchParams) {
   for (let retry = 0; ; retry++) {
     try { return pageResult(await buttondown(context, `/subscribers?${query}`)) }

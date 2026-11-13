@@ -122,12 +122,21 @@ it('prepara a campanha quando Buttondown retorna template nulo para usar o padr�
 it.each(['all_active', 'selected'] as const)('publica campanha %s uma única vez e nunca usa send-draft', async mode => {
   const { env } = setup()
   env.CAMPAIGN_SENDING_ENABLED = 'true'
+  let metadata: Record<string, string> = { existing: 'preserved' }
   const original = vi.mocked(fetch).getMockImplementation()!
   vi.mocked(fetch).mockImplementation(async (url, init) => {
-    if (new URL(String(url)).searchParams.has('ids')) return Response.json({ results: [{ id: 'sub_one', email_address: 'chosen@example.com', type: 'regular' }], count: 1, next: null })
+    if (new URL(String(url)).searchParams.has('ids')) return Response.json({ results: [{ id: 'sub_one', email_address: 'chosen@example.com', type: 'regular', metadata }], count: 1, next: null })
     if (String(url).includes('/subscribers?')) return Response.json({ count: 1, results: [] })
+    if (String(url).endsWith('/bulk_actions')) {
+      const payload = JSON.parse(String(init?.body))
+      expect(payload).toMatchObject({ type: 'apply_metadata', metadata: { action: 'add', ids: ['sub_one'] } })
+      metadata = { ...metadata, ...payload.metadata.metadata }
+      return Response.json({ id: 'bulk_one', status: 'processed' })
+    }
     if (String(url).endsWith('/publish')) {
-      if (String(init?.body).includes('"subscriber.type"')) return Response.json({ detail: [] }, { status: 422 })
+      const fields = JSON.parse(String(init?.body)).filters.filters.map((filter: { field: string }) => filter.field)
+      // Contract from the provider's actual 422: neither email_address nor type is supported.
+      if (fields.some((field: string) => !/^subscriber\.metadata\..+$/.test(field))) return Response.json({ detail: [] }, { status: 422 })
       return Response.json({ id: 'em_test', status: 'about_to_send' })
     }
     return original(url, init)
@@ -136,14 +145,15 @@ it.each(['all_active', 'selected'] as const)('publica campanha %s uma única vez
   const response = await call({ action: 'prepare', audience: mode === 'selected' ? { mode, subscriberIds: ['sub_one'] } : { mode } })
   expect(response.status).toBe(200)
   const prepared = await response.json() as { attemptId: string }
-  expect(vi.mocked(fetch).mock.calls.some(([_url, init]) => init?.method === 'POST')).toBe(false)
+  expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('/publish'))).toBe(false)
   expect((await call({ action: 'confirm', attemptId: prepared.attemptId, confirm: true })).status).toBe(200)
   expect((await call({ action: 'confirm', attemptId: prepared.attemptId, confirm: true })).status).toBe(409)
   const publishes = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/publish'))
   expect(publishes).toHaveLength(1)
   const payload = JSON.parse(publishes[0][1]!.body as string)
   if (mode === 'selected') {
-    expect(payload.filters).toEqual({ predicate: 'or', groups: [], filters: [{ field: 'subscriber.email_address', operator: 'equals', value: 'chosen@example.com' }] })
+    expect(payload.filters).toEqual({ predicate: 'and', groups: [], filters: [{ field: expect.stringMatching(/^subscriber\.metadata\.crm_audience_[a-f0-9]{64}$/), operator: 'equals', value: 'included' }] })
+    expect(metadata.existing).toBe('preserved')
   } else expect(payload).toEqual({ filters: { predicate: 'and', groups: [], filters: [] } })
   expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('/send-draft'))).toBe(false)
 })
