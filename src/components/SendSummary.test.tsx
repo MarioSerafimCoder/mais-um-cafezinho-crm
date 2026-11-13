@@ -46,3 +46,12 @@ it('não oferece repetição quando o resultado é incerto', async () => {
   await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Resultado incerto'))
   expect(screen.queryByRole('button', { name: 'Confirmar e enviar campanha' })).not.toBeInTheDocument()
 })
+it('mostra a recusa no resumo e remove a indicação de que a campanha está pronta', async () => {
+  mocks.campaignDelivery.mockRejectedValue(new ApiError('Campos recusados: filters.', 422))
+  render(<SendSummary draft={draft} prepared={preparation()} onBack={vi.fn()} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Confirmar e enviar campanha' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Campos recusados: filters.')
+  expect(screen.getByRole('heading', { name: 'Envio recusado' })).toBeInTheDocument()
+  expect(screen.queryByRole('heading', { name: 'Pronta para enviar' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Confirmar e enviar campanha' })).not.toBeInTheDocument()
+})

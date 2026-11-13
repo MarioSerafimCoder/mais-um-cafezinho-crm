@@ -1,6 +1,6 @@
 /// <reference types="node" />
 // @vitest-environment node
-import { activeAudienceFilters } from '../shared/audience'
+import { activeSubscriberTypes } from '../shared/audience'
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite'
 import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
@@ -127,7 +127,10 @@ it.each(['all_active', 'selected'] as const)('publica campanha %s uma única vez
   vi.mocked(fetch).mockImplementation(async (url, init) => {
     if (new URL(String(url)).searchParams.has('ids')) return Response.json({ results: [{ id: 'sub_one', email_address: 'chosen@example.com', type: 'regular' }], count: 1, next: null })
     if (String(url).includes('/subscribers?')) return Response.json({ count: 1, results: [] })
-    if (String(url).endsWith('/publish')) return Response.json({ id: 'em_test', status: 'about_to_send' })
+    if (String(url).endsWith('/publish')) {
+      if (String(init?.body).includes('"subscriber.type"')) return Response.json({ detail: [] }, { status: 422 })
+      return Response.json({ id: 'em_test', status: 'about_to_send' })
+    }
     return original(url, init)
   })
   const call = (input: object) => campaignPost({ env, request: new Request('https://example.com/api/campaign-delivery', { method: 'POST', body: JSON.stringify({ draftId: 'test-draft', cloudRevision: 4, ...input }) }) })
@@ -140,13 +143,36 @@ it.each(['all_active', 'selected'] as const)('publica campanha %s uma única vez
   const publishes = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/publish'))
   expect(publishes).toHaveLength(1)
   const payload = JSON.parse(publishes[0][1]!.body as string)
+  const activeFilters = { predicate: 'or', groups: [], filters: activeSubscriberTypes.map(value => ({ field: 'subscriber.status', operator: 'equals', value })) }
   if (mode === 'selected') {
     expect(payload.filters).toEqual({ predicate: 'and', filters: [], groups: [
       { predicate: 'or', groups: [], filters: [{ field: 'subscriber.email_address', operator: 'equals', value: 'chosen@example.com' }] },
-      activeAudienceFilters(),
+      activeFilters,
     ] })
-  } else expect(payload).toEqual({ filters: activeAudienceFilters() })
+  } else expect(payload).toEqual({ filters: activeFilters })
   expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('/send-draft'))).toBe(false)
+})
+
+it('informa o campo recusado pela Buttondown sem expor os valores nem republicar', async () => {
+  const { env, db } = setup()
+  env.CAMPAIGN_SENDING_ENABLED = 'true'
+  const original = vi.mocked(fetch).getMockImplementation()!
+  vi.mocked(fetch).mockImplementation(async (url, init) => {
+    if (String(url).includes('/subscribers?')) return Response.json({ count: 1, results: [] })
+    if (String(url).endsWith('/publish')) {
+      return Response.json({ detail: [{ loc: ['body', 'payload', 'filters', 'filters', 0, 'field'], input: 'private@example.com' }] }, { status: 422 })
+    }
+    return original(url, init)
+  })
+  const call = (input: object) => campaignPost({ env, request: new Request('https://example.com/api/campaign-delivery', { method: 'POST', body: JSON.stringify({ draftId: 'test-draft', cloudRevision: 4, ...input }) }) })
+  const { attemptId } = await (await call({ action: 'prepare', audience: { mode: 'all_active' } })).json() as { attemptId: string }
+  const confirm = { action: 'confirm', attemptId, confirm: true }
+  const response = await call(confirm)
+  expect(response.status).toBe(422)
+  expect(await response.json()).toEqual({ state: 'rejected', error: 'A Buttondown recusou a solicitação de publicação (HTTP 422). Campos recusados: filters.' })
+  expect(db.prepare('SELECT state FROM campaign_send_attempts WHERE id = ?').get(attemptId)?.state).toBe('rejected')
+  expect((await call(confirm)).status).toBe(409)
+  expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/publish'))).toHaveLength(1)
 })
 
 it.each(['timeout', 'null', 'wrong-id', 'draft', 'missing-status'])('reconcilia publicação com resposta %s sem repetir POST publish', async kind => {

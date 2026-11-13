@@ -7,5 +7,6 @@ export function activeSubscriberQuery(extra: Record<string, string> = {}) {
   return query
 }
 export function activeAudienceFilters() {
-  return { predicate: 'or', groups: [], filters: activeSubscriberTypes.map(value => ({ field: 'subscriber.type', operator: 'equals', value })) }
+  // The subscriber list uses "type", while email audience filters use "subscriber.status".
+  return { predicate: 'or', groups: [], filters: activeSubscriberTypes.map(value => ({ field: 'subscriber.status', operator: 'equals', value })) }
 }

@@ -8,6 +8,14 @@ import { Button } from './ui'
 
 type Props = { draft: DraftRecord; prepared: PreparedDelivery; onBack: () => void }
 
+const confirmationCopy = {
+  ready: ['Pronta para enviar', 'A audiência e a edição foram validadas na etapa 3. Confirme para solicitar a publicação.'],
+  confirming: ['Aguardando a Buttondown', 'O CRM está consultando o resultado da publicação.'],
+  sent: ['Campanha aceita', 'A aceitação pela Buttondown não comprova entrega na caixa de entrada.'],
+  rejected: ['Envio recusado', 'Confira o motivo informado e volte à preparação para revisar a edição.'],
+  uncertain: ['Resultado incerto', 'Consulte o histórico para verificar o estado remoto da tentativa.'],
+}
+
 export function SendSummary({ draft, prepared, onBack }: Props) {
   const [state, setState] = useState<'ready' | 'confirming' | 'sent' | 'rejected' | 'uncertain'>('ready')
   const [message, setMessage] = useState('')
@@ -28,7 +36,8 @@ export function SendSummary({ draft, prepared, onBack }: Props) {
       if (!result.accepted) throw new ApiError('Resposta de envio não confirmada. Consulte a Buttondown antes de repetir.', 502)
       setState('sent'); setMessage('Campanha aceita pela Buttondown.')
     } catch (cause) {
-      const uncertain = cause instanceof ApiError && (cause.status === 0 || cause.status >= 500)
+      const uncertain = !(cause instanceof ApiError)
+        || cause.providerState === 'attempted' || cause.status === 0 || cause.status >= 500
       setState(uncertain ? 'uncertain' : 'rejected')
       setMessage(uncertain ? 'Resultado incerto. Não repita o envio; consulte o histórico da campanha e a Buttondown.' : cause instanceof Error ? cause.message : 'Não foi possível enviar a campanha.')
     }
@@ -42,7 +51,7 @@ export function SendSummary({ draft, prepared, onBack }: Props) {
       {state === 'ready' && (changed || expired) && <p role="alert" className="send-summary-message is-error">{changed ? 'Os dados da edição mudaram.' : 'A preparação expirou.'} Volte à etapa 3 para preparar novamente.</p>}
       <div className="send-summary-actions"><Button variant="outline" onClick={onBack} disabled={state === 'confirming'}>Voltar à preparação</Button>{state === 'ready' && <Button icon={<Send size={15} />} disabled={changed || expired} onClick={() => void confirm()}>Confirmar e enviar campanha</Button>}{state === 'confirming' && <Button disabled>Enviando campanha…</Button>}{state === 'sent' && <Button disabled>Campanha aceita</Button>}</div>
       {message && <p className={`send-summary-message ${state === 'sent' ? 'is-success' : 'is-error'}`} role={state === 'sent' ? 'status' : 'alert'}>{state === 'sent' ? <CheckCircle2 size={16} /> : <Info size={16} />}{message}</p>}
-    </div><aside className="send-summary-side"><span className="eyebrow">CONFIRMAÇÃO FINAL</span><h2>Pronta para enviar</h2><p>A audiência e a edição foram validadas na etapa 3. O envio real acontece ao clicar em “Confirmar e enviar campanha”.</p><p>A aceitação pela Buttondown não comprova entrega na caixa de entrada.</p></aside></div>
+    </div><aside className="send-summary-side"><span className="eyebrow">CONFIRMAÇÃO FINAL</span><h2>{confirmationCopy[state][0]}</h2><p>{confirmationCopy[state][1]}</p></aside></div>
     {state === 'uncertain' && <CampaignHistory draftId={draft.id} />}
   </section>
 }

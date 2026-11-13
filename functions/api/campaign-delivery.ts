@@ -2,7 +2,7 @@ import { activeAudienceFilters } from '../../shared/audience'
 import { countActiveSubscribers as countActive, validateSelectedSubscribers as validateSelected } from '../_subscriber-audience'
 import { selectedAudienceFilters } from '../_campaign-audience'
 import { database, getDocument } from '../_documents'
-import { buttondown, errorResponse, json, matchesButtondownTemplate, parseJson, validId, type AppEnv } from '../_utils'
+import { buttondown, buttondownValidationFields, errorResponse, json, matchesButtondownTemplate, parseJson, validId, type AppEnv } from '../_utils'
 
 type Context = { request: Request; env: AppEnv }
 type Audience = { mode: 'all_active' } | { mode: 'selected'; subscriberIds: string[] }
@@ -202,7 +202,16 @@ export async function onRequestPost(context: Context) {
         return json({ accepted: true, audienceMode: attempt.audience_mode, recipientCount: attempt.audience_count })
       } catch (error) {
         const status = typeof error === 'object' && error && 'status' in error ? Number(error.status) : 0
-        if (status >= 400 && status < 500 && status !== 409) await db.prepare("UPDATE campaign_send_attempts SET state = 'rejected' WHERE id = ? AND state = 'attempted'").bind(attempt.id).run()
+        if (status >= 400 && status < 500 && status !== 408 && status !== 409) {
+          await db.prepare("UPDATE campaign_send_attempts SET state = 'rejected' WHERE id = ? AND state = 'attempted'").bind(attempt.id).run()
+          if (status === 422) {
+            const fields = buttondownValidationFields(error)
+            const detail = fields.length ? ` Campos recusados: ${fields.join(', ')}.` : ''
+            return json({ error: `A Buttondown recusou a solicitação de publicação (HTTP 422).${detail}`, state: 'rejected' }, 422)
+          }
+        } else {
+          return json({ error: 'A publicação não foi confirmada. Consulte o histórico para reconciliar a tentativa.', state: 'attempted' }, 502)
+        }
         return errorResponse(error)
       }
     }

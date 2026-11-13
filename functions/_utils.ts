@@ -79,10 +79,24 @@ export async function buttondown(context: RequestContext, path: string, init: Re
   if (!response.ok) {
     const error = new Error(`BUTTONDOWN_${response.status}`)
     Object.assign(error, { status: response.status, retryAfterMs: retryAfterMs(response.headers.get('Retry-After')) })
+    if (response.status === 422) {
+      // Validation errors can include the submitted values. Retain only known field names.
+      const payload = await response.json().catch(() => null) as { detail?: unknown } | null
+      const allowedFields = ['filters', 'subject', 'body', 'description', 'template', 'publish_date']
+      const entries = Array.isArray(payload?.detail) ? payload.detail : []
+      const validationFields = allowedFields.filter(field => entries.some(entry =>
+        Array.isArray(entry?.loc) && entry.loc[0] === 'body' && entry.loc.slice(1, 3).includes(field)))
+      Object.assign(error, { validationFields })
+    }
     throw error
   }
   if (response.status === 204) return null
   return response.json() as Promise<unknown>
+}
+
+export function buttondownValidationFields(error: unknown): string[] {
+  if (error instanceof Error && 'validationFields' in error && Array.isArray(error.validationFields)) return error.validationFields
+  return []
 }
 
 export function errorResponse(error: unknown) {
