@@ -12,7 +12,7 @@ it('consulta tentativa incerta e exibe o estado reconciliado sem enviar', async 
   fireEvent.click(screen.getByRole('button', { name: 'Atualizar histórico de envios' }))
   await screen.findByText(/Resultado incerto/)
   fireEvent.click(screen.getByRole('button', { name: 'Consultar estado na Buttondown' }))
-  await screen.findByText(/Publicação confirmada/)
+  await screen.findByText(/Envio em andamento/)
   expect(mocks.reconcile).toHaveBeenCalledExactlyOnceWith('draft', 'attempt')
   expect(screen.getByText(/in_flight/)).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: /enviar campanha/i })).not.toBeInTheDocument()

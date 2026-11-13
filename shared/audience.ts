@@ -7,6 +7,8 @@ export function activeSubscriberQuery(extra: Record<string, string> = {}) {
   return query
 }
 export function activeAudienceFilters() {
-  // The subscriber list uses "type", while email audience filters use "subscriber.status".
-  return { predicate: 'or', groups: [], filters: activeSubscriberTypes.map(value => ({ field: 'subscriber.status', operator: 'equals', value })) }
+  // Native Everyone audience. Subscriber API types are not a contract for the
+  // publication filter's status values. Buttondown applies active eligibility
+  // and suppressions itself, as it does for Everyone in its publishing UI.
+  return { predicate: 'and', groups: [], filters: [] }
 }

@@ -1,6 +1,5 @@
 /// <reference types="node" />
 // @vitest-environment node
-import { activeSubscriberTypes } from '../shared/audience'
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite'
 import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
@@ -143,13 +142,9 @@ it.each(['all_active', 'selected'] as const)('publica campanha %s uma única vez
   const publishes = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/publish'))
   expect(publishes).toHaveLength(1)
   const payload = JSON.parse(publishes[0][1]!.body as string)
-  const activeFilters = { predicate: 'or', groups: [], filters: activeSubscriberTypes.map(value => ({ field: 'subscriber.status', operator: 'equals', value })) }
   if (mode === 'selected') {
-    expect(payload.filters).toEqual({ predicate: 'and', filters: [], groups: [
-      { predicate: 'or', groups: [], filters: [{ field: 'subscriber.email_address', operator: 'equals', value: 'chosen@example.com' }] },
-      activeFilters,
-    ] })
-  } else expect(payload).toEqual({ filters: activeFilters })
+    expect(payload.filters).toEqual({ predicate: 'or', groups: [], filters: [{ field: 'subscriber.email_address', operator: 'equals', value: 'chosen@example.com' }] })
+  } else expect(payload).toEqual({ filters: { predicate: 'and', groups: [], filters: [] } })
   expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('/send-draft'))).toBe(false)
 })
 
@@ -217,4 +212,25 @@ it.each(['draft', 'changed', '404'])('não desbloqueia nem aceita uma tentativa 
   await call({ action: 'reconcile', attemptId: prepared.attemptId })
   expect(db.prepare('SELECT state FROM campaign_send_attempts WHERE id = ?').get(prepared.attemptId)?.state).toBe('attempted')
   expect((await call({ action: 'confirm', attemptId: prepared.attemptId, confirm: true })).status).toBe(409)
+})
+
+it.each(['zero', 'delivered', 'unavailable', 'invalid'])('reconcilia estado sem inventar métricas: %s', async kind => {
+  const { env, db } = setup(); env.CAMPAIGN_SENDING_ENABLED = 'true'
+  let remote: Record<string, unknown> = { id: 'em_test', status: 'draft', body: '<p>Teste</p>', subject: 'Uma newsletter nova', template: 'classic' }
+  vi.mocked(fetch).mockImplementation(async (url, init) => {
+    if (String(url).includes('/subscribers?')) return Response.json({ results: [], count: 1 })
+    if (String(url).endsWith('/analytics')) {
+      if (kind === 'unavailable') return Response.json({}, { status: 403 })
+      return Response.json(kind === 'invalid' ? { recipients: '0', deliveries: -1 } : { recipients: kind === 'zero' ? 0 : 1, deliveries: kind === 'zero' ? 0 : 1 })
+    }
+    if (String(url).endsWith('/publish')) { remote = { ...remote, ...JSON.parse(init!.body as string), status: 'sent' }; return Response.json(remote) }
+    return Response.json(remote)
+  })
+  const call = (input: object) => campaignPost({ env, request: new Request('https://example.com/api/campaign-delivery', { method: 'POST', body: JSON.stringify({ draftId: 'test-draft', cloudRevision: 4, ...input }) }) })
+  const { attemptId } = await (await call({ action: 'prepare', audience: { mode: 'all_active' } })).json()
+  await call({ action: 'confirm', attemptId, confirm: true })
+  const result = await (await call({ action: 'reconcile', attemptId })).json()
+  expect(result.attempt).toMatchObject({ state: 'accepted', provider_status: 'sent', publication_verified: true, delivery: ['unavailable', 'invalid'].includes(kind) ? null : { recipients: kind === 'zero' ? 0 : 1, deliveries: kind === 'zero' ? 0 : 1 } })
+  expect(db.prepare('SELECT state FROM campaign_send_attempts WHERE id = ?').get(attemptId)?.state).toBe('accepted')
+  expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/publish'))).toHaveLength(1)
 })

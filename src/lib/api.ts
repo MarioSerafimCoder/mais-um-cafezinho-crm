@@ -48,7 +48,7 @@ export const api = {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email_address: emailAddress }),
   }),
   campaignDeliveryStatus: () => request<CampaignDeliveryStatus>('/api/campaign-delivery'),
-  campaignDelivery: (payload: Record<string, unknown>) => request<Partial<PreparedCampaignDelivery> & { accepted?: boolean; cancelled?: boolean; error?: string }>('/api/campaign-delivery', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
+  campaignDelivery: (payload: Record<string, unknown>) => request<Partial<PreparedCampaignDelivery> & { accepted?: boolean; providerStatus?: string; cancelled?: boolean; error?: string }>('/api/campaign-delivery', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
   editorialTest: (payload: Record<string, unknown>) => request<{ attemptId?: string; recipient?: string; accepted?: boolean; state?: string }>('/api/editorial-test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
   campaigns: (page = 1) => request<ApiPage<Campaign>>(`/api/emails?page=${page}`),
   campaign: (id: string) => request<Campaign>(`/api/emails/${encodeURIComponent(id)}`),

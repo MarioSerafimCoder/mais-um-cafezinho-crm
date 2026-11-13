@@ -132,4 +132,4 @@ export type NewsletterSettings = {
   cloudRevision?: number
 }
 
-export type CampaignAttempt = { publication_hash?: string | null; id: string; draft_id: string; campaign_id: string; subject: string; state: string; audience_count: number; provider_status?: string | null; observed_at?: string | null; created_at: string }
+export type CampaignAttempt = { publication_verified?: boolean; delivery?: Pick<CampaignAnalytics, 'recipients' | 'deliveries' | 'temporary_failures' | 'permanent_failures'> | null; publication_hash?: string | null; id: string; draft_id: string; campaign_id: string; subject: string; state: string; audience_count: number; provider_status?: string | null; observed_at?: string | null; created_at: string }

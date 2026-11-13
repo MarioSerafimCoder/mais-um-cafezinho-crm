@@ -1,4 +1,5 @@
 import { CampaignHistory } from './CampaignHistory'
+import { DeliveryOutcome } from './DeliveryOutcome'
 import { useEffect, useRef, useState } from 'react'
 import { CheckCircle2, Info, Send } from 'lucide-react'
 import { api, ApiError } from '../lib/api'
@@ -19,6 +20,7 @@ const confirmationCopy = {
 export function SendSummary({ draft, prepared, onBack }: Props) {
   const [state, setState] = useState<'ready' | 'confirming' | 'sent' | 'rejected' | 'uncertain'>('ready')
   const [message, setMessage] = useState('')
+  const [providerStatus, setProviderStatus] = useState<string>()
   const [expired, setExpired] = useState(() => Date.parse(prepared.expiresAt) <= Date.now())
   const lock = useRef(false)
   const changed = prepared.draftKey !== deliveryDraftKey(draft)
@@ -34,6 +36,7 @@ export function SendSummary({ draft, prepared, onBack }: Props) {
     try {
       const result = await api.campaignDelivery({ action: 'confirm', draftId: prepared.draftId, cloudRevision: prepared.cloudRevision, attemptId: prepared.attemptId, confirm: true })
       if (!result.accepted) throw new ApiError('Resposta de envio não confirmada. Consulte a Buttondown antes de repetir.', 502)
+      setProviderStatus(result.providerStatus)
       setState('sent'); setMessage('Campanha aceita pela Buttondown.')
     } catch (cause) {
       const uncertain = !(cause instanceof ApiError)
@@ -52,6 +55,7 @@ export function SendSummary({ draft, prepared, onBack }: Props) {
       <div className="send-summary-actions"><Button variant="outline" onClick={onBack} disabled={state === 'confirming'}>Voltar à preparação</Button>{state === 'ready' && <Button icon={<Send size={15} />} disabled={changed || expired} onClick={() => void confirm()}>Confirmar e enviar campanha</Button>}{state === 'confirming' && <Button disabled>Enviando campanha…</Button>}{state === 'sent' && <Button disabled>Campanha aceita</Button>}</div>
       {message && <p className={`send-summary-message ${state === 'sent' ? 'is-success' : 'is-error'}`} role={state === 'sent' ? 'status' : 'alert'}>{state === 'sent' ? <CheckCircle2 size={16} /> : <Info size={16} />}{message}</p>}
     </div><aside className="send-summary-side"><span className="eyebrow">CONFIRMAÇÃO FINAL</span><h2>{confirmationCopy[state][0]}</h2><p>{confirmationCopy[state][1]}</p></aside></div>
-    {state === 'uncertain' && <CampaignHistory draftId={draft.id} />}
+    {(state === 'sent' || state === 'uncertain') && <DeliveryOutcome draftId={prepared.draftId} attemptId={prepared.attemptId} providerStatus={providerStatus} />}
+    {(state === 'sent' || state === 'uncertain') && <CampaignHistory draftId={draft.id} />}
   </section>
 }

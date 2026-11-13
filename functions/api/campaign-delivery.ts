@@ -79,7 +79,17 @@ async function reconcile(context: Context, input: Record<string, unknown>) {
   const observedAt = new Date().toISOString()
   await db.prepare("UPDATE campaign_send_attempts SET provider_status = ?, observed_at = ?, state = CASE WHEN state = 'attempted' AND ? = 1 THEN 'accepted' ELSE state END WHERE id = ?")
     .bind(remote.status, observedAt, verified ? 1 : 0, attempt.id).run()
-  return json({ attempt: await db.prepare('SELECT * FROM campaign_send_attempts WHERE id = ?').bind(attempt.id).first<Attempt>() })
+  // Analytics may be unavailable on accounts without tracking. Never turn a
+  // missing metric into zero or let analytics erase the observed send status.
+  let delivery: Record<string, number> | null = null
+  try {
+    const metrics = await buttondown(context, `/emails/${encodeURIComponent(attempt.campaign_id)}/analytics`)
+    if (metrics && typeof metrics === 'object') {
+      const entries = Object.entries(metrics).filter(([key, value]) => ['recipients', 'deliveries', 'temporary_failures', 'permanent_failures'].includes(key) && Number.isSafeInteger(value) && Number(value) >= 0)
+      if (entries.length) delivery = Object.fromEntries(entries) as Record<string, number>
+    }
+  } catch { /* Publication status remains useful independently of analytics. */ }
+  return json({ attempt: { ...await db.prepare('SELECT * FROM campaign_send_attempts WHERE id = ?').bind(attempt.id).first<Attempt>(), delivery, publication_verified: verified } })
 }
 
 export async function onRequestGet({ request, env }: Context) {
@@ -199,7 +209,7 @@ export async function onRequestPost(context: Context) {
         if (observed?.id === attempt.campaign_id && typeof observed.status === 'string') await db.prepare('UPDATE campaign_send_attempts SET provider_status = ?, observed_at = ? WHERE id = ?').bind(observed.status, new Date().toISOString(), attempt.id).run()
         if (!validPublication(response, attempt.campaign_id)) return json({ error: 'A publicação não retornou um estado confirmado. Consulte o histórico para reconciliar; não repita o envio.', state: 'attempted' }, 502)
         await db.prepare("UPDATE campaign_send_attempts SET state = 'accepted', provider_status = ?, observed_at = ? WHERE id = ? AND state = 'attempted'").bind(response.status, new Date().toISOString(), attempt.id).run()
-        return json({ accepted: true, audienceMode: attempt.audience_mode, recipientCount: attempt.audience_count })
+        return json({ accepted: true, attemptId: attempt.id, providerStatus: response.status, audienceMode: attempt.audience_mode, recipientCount: attempt.audience_count })
       } catch (error) {
         const status = typeof error === 'object' && error && 'status' in error ? Number(error.status) : 0
         if (status >= 400 && status < 500 && status !== 408 && status !== 409) {

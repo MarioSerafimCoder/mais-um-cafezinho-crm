@@ -13,6 +13,7 @@ test('etapas de prévia, destinatários e resumo da campanha', async ({ page }) 
   await page.route('**/api/campaign-delivery', async route => {
     if (route.request().method() === 'GET') return route.fulfill({ json: { enabled: true } })
     const input = route.request().postDataJSON()
+    if (input.action === 'reconcile') return route.fulfill({ json: { attempt: { state: 'accepted', provider_status: 'sent', publication_verified: true, delivery: { recipients: 0, deliveries: 0 } } } })
     if (input.action === 'confirm') { confirmedCalls++; return route.fulfill({ json: { accepted: true } }) }
     preparedCalls++
     await route.fulfill({ json: { attemptId: 'attempt-e2e', audienceMode: input.audience.mode, recipientCount: 2, cloudRevision: input.cloudRevision, subject: remote.subject, expiresAt: new Date(Date.now() + 60000).toISOString() } })
@@ -43,6 +44,7 @@ test('etapas de prévia, destinatários e resumo da campanha', async ({ page }) 
   await expect(page.getByRole('button', { name: 'Preparar envio', exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: 'Confirmar e enviar campanha' }).click()
   await expect(page.getByText('Campanha aceita pela Buttondown.', { exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Nenhum destinatário recebeu o disparo' })).toBeVisible()
   expect(confirmedCalls).toBe(1)
 })
 
